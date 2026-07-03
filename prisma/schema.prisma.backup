@@ -1,0 +1,507 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum Role {
+  SUPER_ADMIN
+  EXECUTIVE
+  DEPT_HEAD
+  TEACHER
+  FINANCE
+  PROCUREMENT
+  COMMITTEE
+}
+
+enum ProjectStatus {
+  DRAFT
+  PENDING_DEPT_REVIEW
+  PENDING_FINANCE_REVIEW
+  PENDING_EXECUTIVE_APPROVAL
+  IN_PROGRESS
+  PENDING_COMPLETION_REVIEW
+  COMPLETED
+  CANCELLED
+}
+
+enum ApprovalStage {
+  DEPARTMENT
+  FINANCE
+  EXECUTIVE
+  COMPLETION
+}
+
+enum ApprovalDecision {
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
+enum LedgerEntryType {
+  ALLOCATION
+  COMMITMENT
+  COMMITMENT_RELEASE
+  DISBURSEMENT
+  REFUND
+  ADJUSTMENT_INCREASE
+  ADJUSTMENT_DECREASE
+}
+
+enum LedgerReferenceType {
+  PROJECT_APPROVAL
+  PROCUREMENT
+  EXPENSE_CLAIM
+  BUDGET_ADJUSTMENT
+  REFUND
+  REVERSAL
+}
+
+enum ProcurementStatus {
+  DRAFT
+  PENDING_FINANCE_REVIEW
+  PENDING_EXECUTIVE_APPROVAL
+  COMMITTED
+  RECEIVED
+  PAID
+  CANCELLED
+}
+
+enum ExpenseClaimStatus {
+  DRAFT
+  PENDING_FINANCE_REVIEW
+  PENDING_EXECUTIVE_APPROVAL
+  PAID
+  REJECTED
+}
+
+enum RequestStatus {
+  DRAFT
+  PENDING_EXECUTIVE_APPROVAL
+  APPROVED
+  REJECTED
+}
+
+enum AdjustmentKind {
+  INCREASE
+  DECREASE
+}
+
+enum KpiResult {
+  PENDING
+  MET
+  NOT_MET
+}
+
+model User {
+  id            String   @id @default(cuid())
+  username      String   @unique
+  passwordHash  String
+  fullName      String
+  email         String?  @unique
+  phone         String?
+  role          Role
+  departmentId  String?
+  department    Department? @relation(fields: [departmentId], references: [id])
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  responsibleProjects         Project[]                 @relation("ResponsibleUser")
+  approvalEvents              ApprovalEvent[]           @relation("ApprovalActor")
+  postedLedgerEntries         LedgerEntry[]             @relation("LedgerPostedBy")
+  createdProcurements         ProcurementRequest[]      @relation("ProcurementCreator")
+  financeReviewedProcurements ProcurementRequest[]      @relation("ProcurementFinanceReviewer")
+  approvedProcurements        ProcurementRequest[]      @relation("ProcurementApprover")
+  createdExpenseClaims        ExpenseClaim[]            @relation("ExpenseClaimCreator")
+  financeReviewedClaims       ExpenseClaim[]            @relation("ExpenseClaimFinanceReviewer")
+  approvedExpenseClaims       ExpenseClaim[]            @relation("ExpenseClaimApprover")
+  createdAdjustments          BudgetAdjustmentRequest[] @relation("AdjustmentCreator")
+  approvedAdjustments         BudgetAdjustmentRequest[] @relation("AdjustmentApprover")
+  createdRefunds              RefundRequest[]           @relation("RefundCreator")
+  approvedRefunds             RefundRequest[]           @relation("RefundApprover")
+  submittedProgressReports    ProgressReport[]          @relation("ProgressReporter")
+  notifications               Notification[]
+  auditLogs                   AuditLog[]
+}
+
+model Department {
+  id       String    @id @default(cuid())
+  name     String    @unique
+  users    User[]
+  projects Project[]
+}
+
+model AcademicYear {
+  id         String     @id @default(cuid())
+  yearName   String     @unique
+  isActive   Boolean    @default(false)
+  startDate  DateTime?
+  endDate    DateTime?
+  strategies Strategy[]
+  projects   Project[]
+}
+
+model FiscalYear {
+  id          String             @id @default(cuid())
+  yearName    String             @unique
+  isActive    Boolean            @default(false)
+  startDate   DateTime?
+  endDate     DateTime?
+  fundBudgets FiscalFundBudget[]
+  projects    Project[]
+}
+
+model Strategy {
+  id             String       @id @default(cuid())
+  academicYearId String
+  academicYear   AcademicYear @relation(fields: [academicYearId], references: [id], onDelete: Cascade)
+  code           String
+  title          String
+  description    String?
+  projects       Project[]
+
+  @@unique([academicYearId, code])
+}
+
+model FundSource {
+  id          String             @id @default(cuid())
+  name        String             @unique
+  fundBudgets FiscalFundBudget[]
+}
+
+model FiscalFundBudget {
+  id             String       @id @default(cuid())
+  fiscalYearId   String
+  fiscalYear     FiscalYear   @relation(fields: [fiscalYearId], references: [id], onDelete: Cascade)
+  fundSourceId   String
+  fundSource     FundSource   @relation(fields: [fundSourceId], references: [id])
+  budgetAmount   Decimal      @db.Decimal(14, 2)
+  fundingRequests ProjectFundingRequest[]
+  ledgerEntries   LedgerEntry[]
+  procurementLines ProcurementFundingLine[]
+  expenseLines     ExpenseClaimFundingLine[]
+  adjustmentLines  BudgetAdjustmentLine[]
+  refundLines      RefundLine[]
+
+  @@unique([fiscalYearId, fundSourceId])
+}
+
+model Project {
+  id                String        @id @default(cuid())
+  academicYearId    String
+  academicYear      AcademicYear  @relation(fields: [academicYearId], references: [id])
+  fiscalYearId      String
+  fiscalYear        FiscalYear    @relation(fields: [fiscalYearId], references: [id])
+  strategyId        String?
+  strategy          Strategy?     @relation(fields: [strategyId], references: [id])
+  departmentId      String
+  department        Department    @relation(fields: [departmentId], references: [id])
+  projectCode       String
+  projectName       String
+  rationale         String?
+  objectives        String?
+  quantitativeTarget String?
+  qualitativeTarget String?
+  indicators        String?
+  method             String?
+  expectedOutcome   String?
+  responsibleUserId String
+  responsibleUser   User          @relation("ResponsibleUser", fields: [responsibleUserId], references: [id])
+  startDate         DateTime?
+  endDate           DateTime?
+  status            ProjectStatus @default(DRAFT)
+  approvalRound     Int           @default(0)
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+
+  activities         ProjectActivity[]
+  fundingRequests    ProjectFundingRequest[]
+  approvalEvents     ApprovalEvent[]
+  ledgerEntries      LedgerEntry[]
+  procurements       ProcurementRequest[]
+  expenseClaims      ExpenseClaim[]
+  adjustmentRequests BudgetAdjustmentRequest[]
+  refundRequests     RefundRequest[]
+  attachments        Attachment[]
+  progressReports    ProgressReport[]
+  kpis               ProjectKpi[]
+
+  @@unique([academicYearId, projectCode])
+  @@index([fiscalYearId, status])
+  @@index([departmentId, status])
+  @@index([responsibleUserId, status])
+}
+
+model ProjectFundingRequest {
+  id                    String           @id @default(cuid())
+  projectId             String
+  project               Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  fundBudgetId          String
+  fundBudget            FiscalFundBudget @relation(fields: [fundBudgetId], references: [id])
+  requestedAmount       Decimal          @db.Decimal(14, 2)
+  financeReviewedAmount Decimal?         @db.Decimal(14, 2)
+  approvedAmount        Decimal?         @db.Decimal(14, 2)
+
+  @@unique([projectId, fundBudgetId])
+}
+
+model ProjectActivity {
+  id        String  @id @default(cuid())
+  projectId String
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  name      String
+  startDate DateTime?
+  endDate   DateTime?
+  budget    Decimal @db.Decimal(14, 2) @default(0)
+}
+
+model ApprovalEvent {
+  id        String           @id @default(cuid())
+  projectId String
+  project   Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  actorId   String
+  actor     User             @relation("ApprovalActor", fields: [actorId], references: [id])
+  round     Int
+  stage     ApprovalStage
+  decision  ApprovalDecision
+  comment   String?
+  decidedAt DateTime         @default(now())
+}
+
+model LedgerEntry {
+  id                 String              @id @default(cuid())
+  fiscalFundBudgetId String
+  fiscalFundBudget   FiscalFundBudget    @relation(fields: [fiscalFundBudgetId], references: [id])
+  projectId          String
+  project            Project             @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  entryType          LedgerEntryType
+  amount             Decimal             @db.Decimal(14, 2)
+  description        String?
+  referenceType      LedgerReferenceType
+  referenceId        String
+  reversalOfId       String?
+  reversalOf         LedgerEntry?        @relation("LedgerReversal", fields: [reversalOfId], references: [id])
+  reversals          LedgerEntry[]       @relation("LedgerReversal")
+  postedById         String
+  postedBy           User                @relation("LedgerPostedBy", fields: [postedById], references: [id])
+  postedAt           DateTime            @default(now())
+
+  @@unique([referenceType, referenceId, entryType, fiscalFundBudgetId])
+  @@index([projectId, postedAt])
+  @@index([fiscalFundBudgetId, postedAt])
+}
+
+model ProcurementRequest {
+  id                 String            @id @default(cuid())
+  projectId          String
+  project            Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  documentNo         String            @unique
+  subject            String
+  status             ProcurementStatus @default(DRAFT)
+  createdById        String
+  createdBy          User              @relation("ProcurementCreator", fields: [createdById], references: [id])
+  financeReviewerId  String?
+  financeReviewer    User?             @relation("ProcurementFinanceReviewer", fields: [financeReviewerId], references: [id])
+  approverId         String?
+  approver           User?             @relation("ProcurementApprover", fields: [approverId], references: [id])
+  comment            String?
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+  reviewedAt         DateTime?
+  approvedAt         DateTime?
+  receivedAt         DateTime?
+  paidAt             DateTime?
+
+  items        ProcurementItem[]
+  fundingLines ProcurementFundingLine[]
+  attachments  Attachment[]
+}
+
+model ProcurementItem {
+  id             String             @id @default(cuid())
+  procurementId  String
+  procurement    ProcurementRequest @relation(fields: [procurementId], references: [id], onDelete: Cascade)
+  itemName       String
+  quantity       Int
+  unitPrice      Decimal            @db.Decimal(14, 2)
+  totalPrice     Decimal            @db.Decimal(14, 2)
+}
+
+model ProcurementFundingLine {
+  id             String             @id @default(cuid())
+  procurementId  String
+  procurement    ProcurementRequest @relation(fields: [procurementId], references: [id], onDelete: Cascade)
+  fundBudgetId   String
+  fundBudget     FiscalFundBudget   @relation(fields: [fundBudgetId], references: [id])
+  amount         Decimal            @db.Decimal(14, 2)
+
+  @@unique([procurementId, fundBudgetId])
+}
+
+model ExpenseClaim {
+  id                String             @id @default(cuid())
+  projectId         String
+  project           Project            @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  description       String
+  status            ExpenseClaimStatus @default(DRAFT)
+  createdById       String
+  createdBy         User               @relation("ExpenseClaimCreator", fields: [createdById], references: [id])
+  financeReviewerId String?
+  financeReviewer   User?              @relation("ExpenseClaimFinanceReviewer", fields: [financeReviewerId], references: [id])
+  approverId        String?
+  approver          User?              @relation("ExpenseClaimApprover", fields: [approverId], references: [id])
+  comment           String?
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  reviewedAt        DateTime?
+  approvedAt        DateTime?
+
+  fundingLines ExpenseClaimFundingLine[]
+  attachments  Attachment[]
+}
+
+model ExpenseClaimFundingLine {
+  id            String           @id @default(cuid())
+  expenseId     String
+  expense       ExpenseClaim     @relation(fields: [expenseId], references: [id], onDelete: Cascade)
+  fundBudgetId  String
+  fundBudget    FiscalFundBudget @relation(fields: [fundBudgetId], references: [id])
+  amount        Decimal          @db.Decimal(14, 2)
+
+  @@unique([expenseId, fundBudgetId])
+}
+
+model BudgetAdjustmentRequest {
+  id          String         @id @default(cuid())
+  projectId   String
+  project     Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  kind        AdjustmentKind
+  reason      String
+  status      RequestStatus  @default(PENDING_EXECUTIVE_APPROVAL)
+  createdById String
+  createdBy   User           @relation("AdjustmentCreator", fields: [createdById], references: [id])
+  approverId  String?
+  approver    User?          @relation("AdjustmentApprover", fields: [approverId], references: [id])
+  createdAt   DateTime       @default(now())
+  decidedAt   DateTime?
+
+  lines BudgetAdjustmentLine[]
+}
+
+model BudgetAdjustmentLine {
+  id            String                  @id @default(cuid())
+  requestId     String
+  request       BudgetAdjustmentRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  fundBudgetId  String
+  fundBudget    FiscalFundBudget        @relation(fields: [fundBudgetId], references: [id])
+  amount        Decimal                 @db.Decimal(14, 2)
+}
+
+model RefundRequest {
+  id          String        @id @default(cuid())
+  projectId   String
+  project     Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  reason      String
+  status      RequestStatus @default(PENDING_EXECUTIVE_APPROVAL)
+  createdById String
+  createdBy   User          @relation("RefundCreator", fields: [createdById], references: [id])
+  approverId  String?
+  approver    User?         @relation("RefundApprover", fields: [approverId], references: [id])
+  createdAt   DateTime      @default(now())
+  decidedAt   DateTime?
+
+  lines RefundLine[]
+}
+
+model RefundLine {
+  id            String           @id @default(cuid())
+  requestId     String
+  request       RefundRequest    @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  fundBudgetId  String
+  fundBudget    FiscalFundBudget @relation(fields: [fundBudgetId], references: [id])
+  amount        Decimal          @db.Decimal(14, 2)
+}
+
+model Attachment {
+  id             String              @id @default(cuid())
+  projectId      String?
+  project        Project?            @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  procurementId  String?
+  procurement    ProcurementRequest? @relation(fields: [procurementId], references: [id], onDelete: Cascade)
+  expenseClaimId String?
+  expenseClaim   ExpenseClaim?       @relation(fields: [expenseClaimId], references: [id], onDelete: Cascade)
+  filePath       String
+  fileType       String
+  fileName       String
+  fileSize       Int
+  uploadedAt     DateTime            @default(now())
+}
+
+model ProgressReport {
+  id              String   @id @default(cuid())
+  projectId       String
+  project         Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  reporterId      String
+  reporter        User     @relation("ProgressReporter", fields: [reporterId], references: [id])
+  progressPercent Int
+  summary         String
+  issues          String?
+  periodStart     DateTime?
+  periodEnd       DateTime?
+  reportDate      DateTime @default(now())
+}
+
+model ProjectKpi {
+  id          String    @id @default(cuid())
+  projectId   String
+  project     Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  name        String
+  unit        String?
+  targetValue String
+  actualValue String?
+  result      KpiResult @default(PENDING)
+  evidence    String?
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title     String
+  message   String
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  userId     String?
+  user       User?    @relation(fields: [userId], references: [id])
+  action     String
+  entityName String
+  entityId   String?
+  reason     String?
+  before     Json?
+  after      Json?
+  metadata   Json?
+  createdAt  DateTime @default(now())
+}
+
+model SchoolProfile {
+  id          String   @id @default(cuid())
+  name        String
+  address     String?
+  affiliation String?
+  vision      String?
+  mission     String?
+  goals       String?
+  strategies  String?
+  standards   String?
+  logoPath    String?
+  updatedAt   DateTime @updatedAt
+}

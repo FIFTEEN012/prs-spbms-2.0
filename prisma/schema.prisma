@@ -1,0 +1,649 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum Role {
+  SUPER_ADMIN
+  EXECUTIVE
+  DEPT_HEAD
+  TEACHER
+  FINANCE
+  PROCUREMENT
+  COMMITTEE
+}
+
+enum ProjectStatus {
+  DRAFT
+  SUBMITTED
+  REVIEWED
+  APPROVED
+  REJECTED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum ApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum TransactionType {
+  ALLOCATE
+  EXPENSE
+  REFUND
+  ADJUST
+}
+
+enum BudgetPlanStatus {
+  DRAFT
+  SUBMITTED
+  APPROVED
+  LOCKED
+  REJECTED
+  CANCELLED
+}
+
+enum BudgetSourceEntryType {
+  RECEIPT
+  CARRY_FORWARD
+  DEDUCTION
+  RETURN
+  CORRECTION_INCREASE
+  CORRECTION_DECREASE
+}
+
+enum BudgetWalletCode {
+  RESERVE
+  UTILITIES
+  CENTRAL
+  ACADEMIC
+  BUDGET
+  PERSONNEL
+  GENERAL
+  LEARNER_ACTIVITY
+  SCHOOL_INCOME
+}
+
+enum WalletSpendMode {
+  TRANSFER_ONLY
+  OPERATING
+  PROJECT_ACTIVITY
+  FLEXIBLE
+}
+
+enum WalletLedgerEntryType {
+  ALLOCATION
+  COMMITMENT
+  COMMITMENT_RELEASE
+  DISBURSEMENT
+  REFUND
+  TRANSFER_IN
+  TRANSFER_OUT
+  ADJUSTMENT_INCREASE
+  ADJUSTMENT_DECREASE
+}
+
+enum WalletReferenceType {
+  BUDGET_PLAN
+  PROJECT_ACTIVITY
+  PURCHASE_REQUEST
+  OPERATING_EXPENSE
+  BUDGET_TRANSFER
+  MIGRATION
+  REVERSAL
+}
+
+enum BudgetRequestStatus {
+  DRAFT
+  PENDING_APPROVAL
+  APPROVED
+  REJECTED
+  PAID
+  CANCELLED
+}
+
+enum BudgetMigrationStatus {
+  PREVIEWED
+  CONFIRMED
+  FAILED
+}
+
+enum ProcurementStatus {
+  REQUESTED
+  ORDERED
+  RECEIVED
+  CANCELLED
+}
+
+model User {
+  id           String      @id @default(cuid())
+  username     String      @unique
+  passwordHash String
+  fullName     String
+  email        String?     @unique
+  phone        String?
+  role         Role
+  departmentId String?
+  department   Department? @relation(fields: [departmentId], references: [id])
+  isActive     Boolean     @default(true)
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  responsibleProjects       Project[]               @relation("ResponsibleUser")
+  approvals                 Approval[]
+  notifications             Notification[]
+  auditLogs                 AuditLog[]
+  createdPurchaseRequests   PurchaseRequest[]       @relation("CreatedPurchaseRequests")
+  createdBudgetPlans        BudgetPlan[]            @relation("BudgetPlanCreator")
+  approvedBudgetPlans       BudgetPlan[]            @relation("BudgetPlanApprover")
+  budgetSourceEntries       BudgetSourceEntry[]     @relation("BudgetSourceEntryCreator")
+  walletLedgerEntries       WalletLedgerEntry[]     @relation("WalletLedgerPoster")
+  createdBudgetTransfers    BudgetTransferRequest[] @relation("BudgetTransferCreator")
+  approvedBudgetTransfers   BudgetTransferRequest[] @relation("BudgetTransferApprover")
+  createdOperatingExpenses  OperatingExpense[]      @relation("OperatingExpenseCreator")
+  approvedOperatingExpenses OperatingExpense[]      @relation("OperatingExpenseApprover")
+  paidOperatingExpenses     OperatingExpense[]      @relation("OperatingExpensePayer")
+  confirmedBudgetMigrations BudgetMigrationRun[]    @relation("BudgetMigrationConfirmer")
+}
+
+model Department {
+  id            String         @id @default(cuid())
+  name          String         @unique
+  users         User[]
+  projects      Project[]
+  budgetWallets BudgetWallet[]
+}
+
+model AcademicYear {
+  id          String       @id @default(cuid())
+  yearName    String       @unique
+  isActive    Boolean      @default(false)
+  startDate   DateTime?
+  endDate     DateTime?
+  strategies  Strategy[]
+  projects    Project[]
+  budgetPlans BudgetPlan[]
+}
+
+model FiscalYear {
+  id        String   @id @default(cuid())
+  yearName  String   @unique
+  isActive  Boolean  @default(false)
+  startDate DateTime
+  endDate   DateTime
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  budgetPlans BudgetPlan[]
+}
+
+model Strategy {
+  id             String       @id @default(cuid())
+  academicYearId String
+  academicYear   AcademicYear @relation(fields: [academicYearId], references: [id], onDelete: Cascade)
+  code           String
+  title          String
+  description    String?
+  projects       Project[]
+
+  @@unique([academicYearId, code])
+}
+
+model FundSource {
+  id                   String                @id @default(cuid())
+  code                 String?               @unique
+  name                 String                @unique
+  budgetAmount         Decimal               @default(0) @db.Decimal(14, 2)
+  projects             Project[]
+  activities           ProjectActivity[]
+  purchaseRequests     PurchaseRequest[]
+  budgetSourceAccounts BudgetSourceAccount[]
+}
+
+model Project {
+  id                 String        @id @default(cuid())
+  academicYearId     String
+  academicYear       AcademicYear  @relation(fields: [academicYearId], references: [id])
+  strategyId         String?
+  strategy           Strategy?     @relation(fields: [strategyId], references: [id])
+  departmentId       String?
+  department         Department?   @relation(fields: [departmentId], references: [id])
+  fundSourceId       String?
+  fundSource         FundSource?   @relation(fields: [fundSourceId], references: [id])
+  projectCode        String        @unique
+  projectName        String
+  rationale          String?
+  objectives         String?
+  quantitativeTarget String?
+  qualitativeTarget  String?
+  indicators         String?
+  method             String?
+  expectedOutcome    String?
+  budgetRequested    Decimal       @default(0) @db.Decimal(14, 2)
+  budgetApproved     Decimal       @default(0) @db.Decimal(14, 2)
+  responsibleUserId  String?
+  responsibleUser    User?         @relation("ResponsibleUser", fields: [responsibleUserId], references: [id])
+  startDate          DateTime?
+  endDate            DateTime?
+  status             ProjectStatus @default(DRAFT)
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+
+  activities       ProjectActivity[]
+  approvals        Approval[]
+  transactions     BudgetTransaction[]
+  procurements     Procurement[]
+  attachments      Attachment[]
+  progressReports  ProgressReport[]
+  evaluations      Evaluation[]
+  purchaseRequests PurchaseRequest[]
+
+  @@index([academicYearId])
+  @@index([departmentId])
+  @@index([responsibleUserId])
+  @@index([status])
+}
+
+model ProjectActivity {
+  id                 String                      @id @default(cuid())
+  projectId          String
+  project            Project                     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  name               String
+  startDate          DateTime?
+  endDate            DateTime?
+  budget             Decimal                     @default(0) @db.Decimal(14, 2)
+  fundSourceId       String?
+  fundSource         FundSource?                 @relation(fields: [fundSourceId], references: [id])
+  purchaseRequests   PurchaseRequest[]
+  fundingAllocations ActivityFundingAllocation[]
+
+  @@index([projectId])
+}
+
+model Approval {
+  id         String         @id @default(cuid())
+  projectId  String
+  project    Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  approverId String
+  approver   User           @relation(fields: [approverId], references: [id])
+  stepOrder  Int
+  status     ApprovalStatus @default(PENDING)
+  comment    String?
+  approvedAt DateTime?
+
+  @@index([projectId])
+  @@index([approverId])
+}
+
+model BudgetTransaction {
+  id              String          @id @default(cuid())
+  projectId       String
+  project         Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  transactionType TransactionType
+  amount          Decimal         @db.Decimal(14, 2)
+  description     String?
+  transactionDate DateTime        @default(now())
+  createdAt       DateTime        @default(now())
+
+  @@index([projectId])
+}
+
+model Procurement {
+  id                String            @id @default(cuid())
+  projectId         String
+  project           Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  purchaseRequestId String?
+  purchaseRequest   PurchaseRequest?  @relation(fields: [purchaseRequestId], references: [id], onDelete: Cascade)
+  itemName          String
+  quantity          Int
+  unitPrice         Decimal           @db.Decimal(14, 2)
+  totalPrice        Decimal           @db.Decimal(14, 2)
+  status            ProcurementStatus @default(REQUESTED)
+  remarks           String?
+  createdAt         DateTime          @default(now())
+
+  @@index([projectId])
+  @@index([purchaseRequestId])
+}
+
+enum ProcurementCategory {
+  SUPPLIES
+  EQUIPMENT
+  FUEL
+  RENOVATION
+  REMUNERATION
+  EXPENSES
+  TEMP_WAGE
+  CONTRACT
+  OTHERS
+}
+
+enum PurchaseRequestStatus {
+  PENDING
+  PLAN_REVIEWED
+  FINANCE_REVIEWED
+  PROCUREMENT_REVIEWED
+  BUDGET_REVIEWED
+  APPROVED
+  REJECTED
+}
+
+model PurchaseRequest {
+  id         String           @id @default(cuid())
+  projectId  String
+  project    Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  activityId String?
+  activity   ProjectActivity? @relation(fields: [activityId], references: [id], onDelete: SetNull)
+
+  documentNo   String? // ที่
+  documentDate DateTime @default(now())
+  subject      String // เรื่อง
+
+  category        ProcurementCategory @default(SUPPLIES)
+  categoryDetails String? // รายละเอียดสำหรับ OTHERS
+
+  fundSourceId   String?
+  fundSource     FundSource?   @relation(fields: [fundSourceId], references: [id], onDelete: SetNull)
+  budgetWalletId String?
+  budgetWallet   BudgetWallet? @relation(fields: [budgetWalletId], references: [id], onDelete: SetNull)
+
+  actionPlanPage   String? // หน้าแผนปฏิบัติการ
+  isNotInPlan      Boolean @default(false)
+  necessityDetails String? // ความจำเป็นหากไม่มีในแผนฯ
+
+  committee Json? // [ { "name": "...", "role": "CHAIRMAN" }, ... ]
+  borrowedFrom Json? // [ { "activityId": "...", "activityName": "...", "amount": 500 } ]
+
+  status PurchaseRequestStatus @default(PENDING)
+
+  // ข้อมูลสแนปช็อต ณ ตอนกรอกขอซื้อ (เอาไว้ออกเอกสาร)
+  allocatedBudget  Decimal? @db.Decimal(14, 2)
+  previousBalance  Decimal? @db.Decimal(14, 2)
+  requestedAmount  Decimal  @db.Decimal(14, 2)
+  remainingBalance Decimal? @db.Decimal(14, 2)
+
+  // ความเห็นของฝ่ายต่างๆ (เก็บประวัติการอนุมัติ)
+  planOpinion      String?
+  planApprovedById String?
+  planApprovedAt   DateTime?
+
+  financeOpinion      String?
+  financeApprovedById String?
+  financeApprovedAt   DateTime?
+
+  procurementOpinion      String?
+  procurementApprovedById String?
+  procurementApprovedAt   DateTime?
+
+  budgetOpinion      String?
+  budgetApprovedById String?
+  budgetApprovedAt   DateTime?
+
+  directorOpinion      String?
+  directorApprovedById String?
+  directorApprovedAt   DateTime?
+
+  createdById String?
+  createdBy   User?   @relation("CreatedPurchaseRequests", fields: [createdById], references: [id])
+
+  items Procurement[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([projectId])
+  @@index([activityId])
+  @@index([status])
+}
+
+model BudgetPlan {
+  id                 String           @id @default(cuid())
+  academicYearId     String
+  academicYear       AcademicYear     @relation(fields: [academicYearId], references: [id])
+  fiscalYearId       String
+  fiscalYear         FiscalYear       @relation(fields: [fiscalYearId], references: [id])
+  status             BudgetPlanStatus @default(DRAFT)
+  name               String
+  percentageSnapshot Json
+  generalSubsidyNet  Decimal          @default(0) @db.Decimal(14, 2)
+  learnerActivityNet Decimal          @default(0) @db.Decimal(14, 2)
+  schoolIncomeNet    Decimal          @default(0) @db.Decimal(14, 2)
+  createdById        String
+  createdBy          User             @relation("BudgetPlanCreator", fields: [createdById], references: [id])
+  approvedById       String?
+  approvedBy         User?            @relation("BudgetPlanApprover", fields: [approvedById], references: [id])
+  submittedAt        DateTime?
+  approvedAt         DateTime?
+  lockedAt           DateTime?
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
+
+  sourceAccounts    BudgetSourceAccount[]
+  wallets           BudgetWallet[]
+  transfers         BudgetTransferRequest[]
+  operatingExpenses OperatingExpense[]
+  migrationRuns     BudgetMigrationRun[]
+
+  @@unique([academicYearId, fiscalYearId])
+  @@index([status])
+}
+
+model BudgetSourceAccount {
+  id           String     @id @default(cuid())
+  budgetPlanId String
+  budgetPlan   BudgetPlan @relation(fields: [budgetPlanId], references: [id], onDelete: Cascade)
+  fundSourceId String
+  fundSource   FundSource @relation(fields: [fundSourceId], references: [id])
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  entries BudgetSourceEntry[]
+
+  @@unique([budgetPlanId, fundSourceId])
+}
+
+model BudgetSourceEntry {
+  id              String                @id @default(cuid())
+  sourceAccountId String
+  sourceAccount   BudgetSourceAccount   @relation(fields: [sourceAccountId], references: [id], onDelete: Cascade)
+  entryType       BudgetSourceEntryType
+  amount          Decimal               @db.Decimal(14, 2)
+  description     String
+  documentNo      String?
+  entryDate       DateTime              @default(now())
+  createdById     String
+  createdBy       User                  @relation("BudgetSourceEntryCreator", fields: [createdById], references: [id])
+  createdAt       DateTime              @default(now())
+
+  @@index([sourceAccountId, entryDate])
+}
+
+model BudgetWallet {
+  id             String           @id @default(cuid())
+  budgetPlanId   String
+  budgetPlan     BudgetPlan       @relation(fields: [budgetPlanId], references: [id], onDelete: Cascade)
+  code           BudgetWalletCode
+  name           String
+  percentage     Decimal?         @db.Decimal(7, 4)
+  spendMode      WalletSpendMode
+  departmentId   String?
+  department     Department?      @relation(fields: [departmentId], references: [id])
+  warningPercent Decimal          @default(15) @db.Decimal(5, 2)
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  ledgerEntries      WalletLedgerEntry[]
+  fundingAllocations ActivityFundingAllocation[]
+  transfersFrom      BudgetTransferRequest[]     @relation("TransferFromWallet")
+  transfersTo        BudgetTransferRequest[]     @relation("TransferToWallet")
+  operatingExpenses  OperatingExpense[]
+  purchaseRequests   PurchaseRequest[]
+
+  @@unique([budgetPlanId, code])
+  @@index([departmentId])
+}
+
+model WalletLedgerEntry {
+  id            String                @id @default(cuid())
+  walletId      String
+  wallet        BudgetWallet          @relation(fields: [walletId], references: [id], onDelete: Restrict)
+  entryType     WalletLedgerEntryType
+  amount        Decimal               @db.Decimal(14, 2)
+  description   String
+  referenceType WalletReferenceType
+  referenceId   String
+  reversalOfId  String?
+  reversalOf    WalletLedgerEntry?    @relation("WalletLedgerReversal", fields: [reversalOfId], references: [id])
+  reversals     WalletLedgerEntry[]   @relation("WalletLedgerReversal")
+  postedById    String
+  postedBy      User                  @relation("WalletLedgerPoster", fields: [postedById], references: [id])
+  postedAt      DateTime              @default(now())
+
+  @@unique([walletId, entryType, referenceType, referenceId])
+  @@index([walletId, postedAt])
+}
+
+model ActivityFundingAllocation {
+  id              String          @id @default(cuid())
+  activityId      String
+  activity        ProjectActivity @relation(fields: [activityId], references: [id], onDelete: Cascade)
+  walletId        String
+  wallet          BudgetWallet    @relation(fields: [walletId], references: [id])
+  requestedAmount Decimal         @db.Decimal(14, 2)
+  approvedAmount  Decimal?        @db.Decimal(14, 2)
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  @@unique([activityId, walletId])
+}
+
+model BudgetTransferRequest {
+  id           String              @id @default(cuid())
+  budgetPlanId String
+  budgetPlan   BudgetPlan          @relation(fields: [budgetPlanId], references: [id], onDelete: Cascade)
+  fromWalletId String
+  fromWallet   BudgetWallet        @relation("TransferFromWallet", fields: [fromWalletId], references: [id])
+  toWalletId   String
+  toWallet     BudgetWallet        @relation("TransferToWallet", fields: [toWalletId], references: [id])
+  amount       Decimal             @db.Decimal(14, 2)
+  reason       String
+  status       BudgetRequestStatus @default(PENDING_APPROVAL)
+  createdById  String
+  createdBy    User                @relation("BudgetTransferCreator", fields: [createdById], references: [id])
+  approverId   String?
+  approver     User?               @relation("BudgetTransferApprover", fields: [approverId], references: [id])
+  createdAt    DateTime            @default(now())
+  decidedAt    DateTime?
+
+  @@index([budgetPlanId, status])
+}
+
+model OperatingExpense {
+  id           String              @id @default(cuid())
+  budgetPlanId String
+  budgetPlan   BudgetPlan          @relation(fields: [budgetPlanId], references: [id], onDelete: Cascade)
+  walletId     String
+  wallet       BudgetWallet        @relation(fields: [walletId], references: [id])
+  description  String
+  amount       Decimal             @db.Decimal(14, 2)
+  documentNo   String?
+  status       BudgetRequestStatus @default(DRAFT)
+  createdById  String
+  createdBy    User                @relation("OperatingExpenseCreator", fields: [createdById], references: [id])
+  approverId   String?
+  approver     User?               @relation("OperatingExpenseApprover", fields: [approverId], references: [id])
+  paidById     String?
+  paidBy       User?               @relation("OperatingExpensePayer", fields: [paidById], references: [id])
+  createdAt    DateTime            @default(now())
+  approvedAt   DateTime?
+  paidAt       DateTime?
+
+  @@index([budgetPlanId, status])
+}
+
+model BudgetMigrationRun {
+  id                 String                @id @default(cuid())
+  budgetPlanId       String
+  budgetPlan         BudgetPlan            @relation(fields: [budgetPlanId], references: [id], onDelete: Cascade)
+  status             BudgetMigrationStatus @default(PREVIEWED)
+  preview            Json
+  legacyProjectCount Int
+  legacyAllocation   Decimal               @db.Decimal(14, 2)
+  legacyExpense      Decimal               @db.Decimal(14, 2)
+  confirmedById      String?
+  confirmedBy        User?                 @relation("BudgetMigrationConfirmer", fields: [confirmedById], references: [id])
+  confirmedAt        DateTime?
+  createdAt          DateTime              @default(now())
+}
+
+model Attachment {
+  id         String   @id @default(cuid())
+  projectId  String
+  project    Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  filePath   String
+  fileType   String?
+  fileName   String?
+  uploadedAt DateTime @default(now())
+}
+
+model ProgressReport {
+  id              String   @id @default(cuid())
+  projectId       String
+  project         Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  progressPercent Int
+  summary         String?
+  issues          String?
+  reportDate      DateTime @default(now())
+}
+
+model Evaluation {
+  id            String   @id @default(cuid())
+  projectId     String
+  project       Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  targetValue   String?
+  actualValue   String?
+  resultSummary String?
+  createdAt     DateTime @default(now())
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title     String
+  message   String
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  userId     String?
+  user       User?    @relation(fields: [userId], references: [id])
+  action     String
+  entityName String
+  entityId   String?
+  metadata   Json?
+  createdAt  DateTime @default(now())
+}
+
+model SchoolProfile {
+  id          String   @id @default(cuid())
+  name        String
+  address     String?
+  affiliation String?
+  vision      String?
+  mission     String?
+  goals       String?
+  strategies  String?
+  standards   String?
+  updatedAt   DateTime @updatedAt
+}

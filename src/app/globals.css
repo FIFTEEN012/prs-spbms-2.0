@@ -1,0 +1,47 @@
+@import url("https://fonts.googleapis.com/css2?family=Sarabun:wght@400;500;600;700&display=swap");
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 210 33% 98%;
+    --foreground: 222.2 47.4% 11.2%;
+    --card: 0 0% 100%;
+    --card-foreground: 222.2 47.4% 11.2%;
+    --primary: 217 91% 33%;
+    --primary-foreground: 0 0% 100%;
+    --muted: 210 38% 95%;
+    --muted-foreground: 215 16% 38%;
+    --border: 214 28% 88%;
+    --input: 214 28% 88%;
+    --ring: 217 91% 33%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+    --radius: 0.9rem;
+  }
+
+  html, body {
+    font-family: "TH Sarabun New", "Sarabun", system-ui, sans-serif;
+    font-size: 17px;
+    min-height: 100%;
+    scroll-behavior: smooth;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+    line-height: 1.45;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  button,
+  input,
+  select,
+  textarea {
+    font: inherit;
+  }
+}
