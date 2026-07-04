@@ -21,6 +21,25 @@ describe("shared list filter parsing", () => {
     expect(filters.sortBy).toBe("createdAt");
     expect(filters.sortDir).toBe("desc");
     expect(filters.status).toBe("");
+    expect(filters.academicYearId).toBe("");
+    expect(filters.responsibleUserId).toBe("");
+    expect(filters.mine).toBe("");
+  });
+
+  it("parses additional project list filters safely", () => {
+    const filters = parseProjectListFilters(
+      new URLSearchParams({
+        academicYearId: "year-2569",
+        responsibleUserId: "user-1",
+        mine: "1",
+        status: "REVIEWED",
+      }),
+    );
+
+    expect(filters.academicYearId).toBe("year-2569");
+    expect(filters.responsibleUserId).toBe("user-1");
+    expect(filters.mine).toBe("1");
+    expect(filters.status).toBe("REVIEWED");
   });
 
   it("ignores invalid user role filters", () => {
@@ -35,15 +54,20 @@ describe("shared list filter parsing", () => {
     expect(filters.isActive).toBe("");
   });
 
-  it("restricts approval queue statuses to the supported workflow states", () => {
+  it("supports approval filters for project code, status, and sortable fields", () => {
     const filters = parseApprovalQueueFilters(
       new URLSearchParams({
+        projectCode: "TEST-001",
         status: "APPROVED",
+        sortBy: "createdAt",
+        sortDir: "asc",
       }),
     );
 
-    expect(filters.status).toBe("");
-    expect(filters.sortBy).toBe("updatedAt");
+    expect(filters.projectCode).toBe("TEST-001");
+    expect(filters.status).toBe("APPROVED");
+    expect(filters.sortBy).toBe("createdAt");
+    expect(filters.sortDir).toBe("asc");
   });
 
   it("rejects malformed dates and negative amounts for purchase request filters", () => {

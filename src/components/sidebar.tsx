@@ -1,11 +1,12 @@
 "use client";
+
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut, useSession } from "next-auth/react";
-import { LogOut, School } from "lucide-react";
+import { BookOpen, LogOut, School } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ROLE_LABELS } from "@/lib/rbac";
-import { APP_NAV } from "@/components/app-nav";
+import { APP_NAV, isNavItemActive } from "@/components/app-nav";
 
 export function Sidebar() {
   const pathname = usePathname();
@@ -13,32 +14,41 @@ export function Sidebar() {
   const role = (data?.user as any)?.role;
 
   return (
-    <aside className="sticky top-0 hidden h-screen w-72 shrink-0 flex-col border-r border-border/70 bg-card/95 print:hidden md:flex">
-      <div className="border-b border-border/70 p-5">
-        <div className="flex items-center gap-2">
-          <School className="size-6 text-primary" />
+    <aside className="sticky top-0 hidden h-screen w-72 shrink-0 flex-col border-r border-border/60 bg-muted/70 shadow-sm backdrop-blur-xl print:hidden md:flex">
+      <div className="border-b border-border/50 p-5">
+        <div className="flex items-center gap-3">
+          <span className="inline-flex size-11 items-center justify-center rounded-lg bg-primary text-primary-foreground shadow-sm">
+            <School className="size-5" />
+          </span>
           <div>
-            <div className="font-bold">PRS SPBMS</div>
+            <div className="font-bold text-primary">PRS SPBMS</div>
             <div className="text-xs text-muted-foreground">แผนปฏิบัติการ & งบประมาณ</div>
           </div>
         </div>
       </div>
+
       <nav className="flex-1 space-y-2 overflow-auto px-3 py-4">
         {APP_NAV.map((item) => {
-          const active = pathname.startsWith(item.href);
+          const active = isNavItemActive(pathname, item.href);
           const Icon = item.icon;
+
           return (
             <Link
               key={item.href}
               href={item.href}
               className={cn(
-                "flex items-center gap-3 rounded-2xl px-4 py-3 text-sm font-medium transition-all",
+                "flex items-center gap-3 rounded-2xl px-4 py-3 text-sm font-medium transition-all active:scale-[0.98]",
                 active
                   ? "bg-primary text-primary-foreground shadow-md shadow-primary/20"
-                  : "text-foreground hover:bg-muted"
+                  : "text-muted-foreground hover:bg-card/80 hover:text-foreground",
               )}
             >
-              <span className={cn("inline-flex h-9 w-9 items-center justify-center rounded-xl", active ? "bg-white/15" : "bg-muted text-primary")}>
+              <span
+                className={cn(
+                  "inline-flex h-9 w-9 items-center justify-center rounded-lg",
+                  active ? "bg-white/15" : "bg-card text-primary",
+                )}
+              >
                 <Icon className="size-4" />
               </span>
               {item.label}
@@ -46,18 +56,29 @@ export function Sidebar() {
           );
         })}
       </nav>
-      <div className="space-y-3 border-t border-border/70 bg-muted/10 p-4">
-        <div className="rounded-2xl border border-border/70 bg-background/90 px-4 py-3 text-sm shadow-sm">
+
+      <div className="space-y-3 border-t border-border/50 bg-card/35 p-4">
+        <a
+          href="#"
+          className="flex items-center gap-3 rounded-lg px-4 py-3 text-sm font-medium text-muted-foreground transition-colors hover:bg-card hover:text-foreground"
+        >
+          <BookOpen className="size-4 text-primary" />
+          คู่มือการใช้งาน
+        </a>
+
+        <div className="rounded-lg border border-border/70 bg-card/85 px-4 py-3 text-sm shadow-sm">
           <div className="font-medium">{data?.user?.name}</div>
           <div className="text-xs text-muted-foreground">
             {role ? ROLE_LABELS[role as keyof typeof ROLE_LABELS] : ""}
           </div>
         </div>
+
         <button
           onClick={() => signOut({ callbackUrl: "/login" })}
-          className="flex w-full items-center justify-center gap-2 rounded-2xl border border-destructive/20 bg-destructive/5 px-4 py-3 text-sm font-semibold text-destructive transition-colors hover:bg-destructive/10"
+          className="flex w-full items-center justify-center gap-2 rounded-lg border border-destructive/20 bg-destructive/5 px-4 py-3 text-sm font-semibold text-destructive transition-colors hover:bg-destructive/10"
         >
-          <LogOut className="size-4" /> ออกจากระบบ
+          <LogOut className="size-4" />
+          ออกจากระบบ
         </button>
       </div>
     </aside>

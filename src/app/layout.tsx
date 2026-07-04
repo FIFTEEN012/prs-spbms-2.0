@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 import { Providers } from "./providers";
 
 export const metadata: Metadata = {
-  title: "PRS SPBMS — ระบบบริหารแผนปฏิบัติการและงบประมาณ",
+  title: "PRS SPBMS - ระบบบริหารแผนปฏิบัติการและงบประมาณ",
   description: "School Plan & Budget Management System",
 };
 

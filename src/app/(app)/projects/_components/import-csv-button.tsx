@@ -1,21 +1,20 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Button } from "@/components/ui/button";
 import {
-  Upload,
-  Download,
+  AlertCircle,
   AlertTriangle,
   CheckCircle2,
-  X,
-  Loader2,
+  Download,
   FileSpreadsheet,
-  AlertCircle,
+  Loader2,
+  Upload,
+  X,
 } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { formatBaht } from "@/lib/utils";
 
-// Mapping Thai columns in CSV to English properties
 const HEADER_MAP: Record<string, string> = {
   "ปีการศึกษา": "yearName",
   "รหัสโครงการ": "projectCode",
@@ -48,45 +47,65 @@ const HEADER_MAP: Record<string, string> = {
   "แหล่งงบประมาณย่อย": "activityFundSource",
 };
 
-// Custom simple & robust CSV parser
+const TEMPLATE_HEADERS = [
+  "ปีการศึกษา",
+  "รหัสโครงการ",
+  "ชื่อโครงการ",
+  "รหัสยุทธศาสตร์",
+  "ฝ่าย/กลุ่มงาน",
+  "แหล่งงบประมาณ",
+  "ผู้รับผิดชอบ",
+  "งบประมาณเสนอขอ",
+  "หลักการและเหตุผล",
+  "วัตถุประสงค์",
+  "เป้าหมายเชิงปริมาณ",
+  "เป้าหมายเชิงคุณภาพ",
+  "ตัวชี้วัด",
+  "วิธีดำเนินการ",
+  "ผลที่คาดว่าจะได้รับ",
+  "วันที่เริ่มต้น",
+  "วันที่สิ้นสุด",
+  "กิจกรรมย่อย",
+  "งบประมาณกิจกรรม",
+  "แหล่งงบประมาณย่อย",
+];
+
+type ParsedProject = Record<string, string>;
+
 function parseCSV(text: string): string[][] {
   const result: string[][] = [];
   let row: string[] = [];
   let inQuotes = false;
   let entry = "";
-
-  // Normalize line endings
   const cleanText = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
 
-  for (let i = 0; i < cleanText.length; i++) {
-    const char = cleanText[i];
-    const nextChar = cleanText[i + 1];
+  for (let index = 0; index < cleanText.length; index += 1) {
+    const char = cleanText[index];
+    const nextChar = cleanText[index + 1];
 
     if (inQuotes) {
       if (char === '"') {
         if (nextChar === '"') {
           entry += '"';
-          i++; // skip next quote
+          index += 1;
         } else {
           inQuotes = false;
         }
       } else {
         entry += char;
       }
+    } else if (char === '"') {
+      inQuotes = true;
+    } else if (char === ",") {
+      row.push(entry.trim());
+      entry = "";
+    } else if (char === "\n") {
+      row.push(entry.trim());
+      result.push(row);
+      row = [];
+      entry = "";
     } else {
-      if (char === '"') {
-        inQuotes = true;
-      } else if (char === ",") {
-        row.push(entry.trim());
-        entry = "";
-      } else if (char === "\n") {
-        row.push(entry.trim());
-        result.push(row);
-        row = [];
-        entry = "";
-      } else {
-        entry += char;
-      }
+      entry += char;
     }
   }
 
@@ -95,7 +114,11 @@ function parseCSV(text: string): string[][] {
     result.push(row);
   }
 
-  return result.filter((r) => r.length > 0 && r.some((cell) => cell !== ""));
+  return result.filter((candidate) => candidate.length > 0 && candidate.some((cell) => cell !== ""));
+}
+
+function quoteCsvCell(value: string) {
+  return `"${value.replace(/"/g, '""')}"`;
 }
 
 export function ImportCsvButton() {
@@ -103,115 +126,85 @@ export function ImportCsvButton() {
   const [isOpen, setIsOpen] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [parsedData, setParsedData] = useState<any[]>([]);
+  const [parsedData, setParsedData] = useState<ParsedProject[]>([]);
   const [clientErrors, setClientErrors] = useState<string[]>([]);
   const [serverErrors, setServerErrors] = useState<string[]>([]);
   const [successCount, setSuccessCount] = useState<number | null>(null);
-  const [fileName, setFileName] = useState<string>("");
+  const [fileName, setFileName] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Generate and download template CSV (UTF-8 with BOM)
   const downloadTemplate = () => {
-    const headers = [
-      "ปีการศึกษา",
-      "รหัสโครงการ",
-      "ชื่อโครงการ",
-      "รหัสยุทธศาสตร์",
-      "ฝ่าย/กลุ่มงาน",
-      "แหล่งงบประมาณ",
-      "ผู้รับผิดชอบ",
-      "งบประมาณเสนอขอ",
-      "หลักการและเหตุผล",
-      "วัตถุประสงค์",
-      "เป้าหมายเชิงปริมาณ",
-      "เป้าหมายเชิงคุณภาพ",
-      "ตัวชี้วัด",
-      "วิธีดำเนินการ",
-      "ผลที่คาดว่าจะได้รับ",
-      "วันที่เริ่มต้น",
-      "วันที่สิ้นสุด",
-      "กิจกรรมย่อย",
-      "งบประมาณกิจกรรม",
-      "แหล่งงบประมาณย่อย",
+    const rows = [
+      TEMPLATE_HEADERS,
+      [
+        "2569",
+        "PRJ-S1-001",
+        "โครงการพัฒนาคุณภาพการเรียนการสอนคณิตศาสตร์",
+        "S1",
+        "กลุ่มบริหารวิชาการ",
+        "เงินอุดหนุนรายหัว",
+        "ครูสมชาย ใจดี",
+        "50000.00",
+        "ยกระดับผลสัมฤทธิ์ทางการเรียนและพัฒนากระบวนการคิดวิเคราะห์",
+        "เพื่อยกระดับผลสัมฤทธิ์ทางการเรียนและส่งเสริมทักษะคณิตศาสตร์",
+        "นักเรียนระดับชั้น ม.3 จำนวน 200 คน",
+        "นักเรียนมีผลสัมฤทธิ์ผ่านเกณฑ์ไม่น้อยกว่าร้อยละ 70",
+        "ร้อยละของนักเรียนที่มีผลสัมฤทธิ์ผ่านเกณฑ์",
+        "จัดค่ายและคลินิกคณิตศาสตร์ พร้อมสรุปผลโครงการ",
+        "นักเรียนมีทักษะและผลการเรียนเฉลี่ยสูงขึ้น",
+        "2026-05-16",
+        "2027-03-31",
+        "",
+        "",
+        "",
+      ],
+      [
+        "2569",
+        "PRJ-S1-001",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "จัดซื้อสื่อการเรียนการสอนคณิตศาสตร์",
+        "30000.00",
+        "เงินอุดหนุนรายหัว",
+      ],
+      [
+        "2569",
+        "PRJ-S1-001",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "จัดกิจกรรมค่ายคณิตศาสตร์สร้างสรรค์",
+        "20000.00",
+        "เงินอุดหนุนการศึกษา",
+      ],
     ];
 
-    const row1 = [
-      "2569",
-      "PRJ-S1-001",
-      "โครงการพัฒนาคุณภาพการเรียนการสอนคณิตศาสตร์",
-      "S1",
-      "กลุ่มบริหารวิชาการ",
-      "เงินอุดหนุนรายหัว",
-      "ครูสมชาย ใจดี",
-      "50000.00",
-      "เนื่องจากผลสัมฤทธิ์ทางการเรียนวิชาคณิตศาสตร์ของนักเรียนต่ำกว่าเป้าหมาย...",
-      "เพื่อยกระดับผลสัมฤทธิ์ทางการเรียน และส่งเสริมกระบวนการคิดวิเคราะห์...",
-      "นักเรียนระดับชั้น ม.3 จำนวน 200 คน",
-      "นักเรียนมีผลสัมฤทธิ์คณิตศาสตร์ผ่านเกณฑ์ไม่น้อยกว่าร้อยละ 70",
-      "ร้อยละของนักเรียนที่มีผลสัมฤทธิ์ผ่านเกณฑ์",
-      "1. ประชุมวางแผนชี้แจง\n2. จัดค่ายคณิตศาสตร์และคลินิกคณิตศาสตร์\n3. สรุปผลรายงานโครงการ",
-      "นักเรียนมีทักษะกระบวนการคิดวิเคราะห์และผลการเรียนเฉลี่ยรายวิชาสูงขึ้น",
-      "2026-05-16",
-      "2027-03-31",
-      "",
-      "",
-      "",
-    ];
-
-    const row2 = [
-      "2569",
-      "PRJ-S1-001",
-      "",
-      "",
-      "",
-      "",
-      "",
-      "",
-      "",
-      "",
-      "",
-      "",
-      "",
-      "",
-      "",
-      "",
-      "",
-      "จัดซื้อสื่อการเรียนการสอนคณิตศาสตร์",
-      "30000.00",
-      "เงินอุดหนุนรายหัว",
-    ];
-
-    const row3 = [
-      "2569",
-      "PRJ-S1-001",
-      "",
-      "",
-      "",
-      "",
-      "",
-      "",
-      "",
-      "",
-      "",
-      "",
-      "",
-      "",
-      "",
-      "",
-      "",
-      "จัดกิจกรรมค่ายคณิตศาสตร์สร้างสรรค์",
-      "20000.00",
-      "เงินอุดหนุนการศึกษา",
-    ];
-
-    const csvContent =
-      "\uFEFF" +
-      headers.join(",") +
-      "\n" +
-      [row1, row2, row3]
-        .map((row) => row.map((cell) => `"${cell.replace(/"/g, '""')}"`).join(","))
-        .join("\n");
-
+    const csvContent = `\uFEFF${rows.map((row) => row.map(quoteCsvCell).join(",")).join("\n")}`;
     const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
@@ -220,13 +213,7 @@ export function ImportCsvButton() {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-  };
-
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      processFile(file);
-    }
+    URL.revokeObjectURL(url);
   };
 
   const processFile = (file: File) => {
@@ -236,66 +223,50 @@ export function ImportCsvButton() {
     setSuccessCount(null);
 
     const reader = new FileReader();
-    reader.onload = (e) => {
-      const text = e.target?.result as string;
+    reader.onload = (event) => {
+      const text = event.target?.result as string;
+
       try {
         const rows = parseCSV(text);
         if (rows.length < 2) {
-          setClientErrors(["ไฟล์ CSV ต้องมีข้อมูลอย่างน้อย 1 แถว (ไม่รวมหัวตาราง)"]);
+          setClientErrors(["ไฟล์ CSV ต้องมีข้อมูลอย่างน้อย 1 แถว"]);
           setParsedData([]);
           return;
         }
 
-        const headers = rows[0].map((h) => h.trim().replace(/^"|"$/g, ""));
-        const dataRows = rows.slice(1);
-
-        // Map column index to English object property
+        const headers = rows[0].map((header) => header.trim().replace(/^\uFEFF/, ""));
         const headerIndices: Record<number, string> = {};
-        headers.forEach((h, index) => {
-          if (HEADER_MAP[h]) {
-            headerIndices[index] = HEADER_MAP[h];
-          }
+        headers.forEach((header, index) => {
+          if (HEADER_MAP[header]) headerIndices[index] = HEADER_MAP[header];
         });
 
-        // Ensure key fields exist in headers
         const mappedProperties = Object.values(headerIndices);
         if (!mappedProperties.includes("projectCode") || !mappedProperties.includes("projectName")) {
           setClientErrors([
-            "ไม่พบคอลัมน์บังคับอย่างใดอย่างหนึ่งในไฟล์ CSV: 'รหัสโครงการ', 'ชื่อโครงการ' กรุณาใช้ไฟล์แม่แบบ",
+            "ไม่พบคอลัมน์บังคับในไฟล์ CSV: 'รหัสโครงการ' และ 'ชื่อโครงการ' กรุณาใช้ไฟล์แม่แบบ",
           ]);
           setParsedData([]);
           return;
         }
 
-        const items: any[] = [];
+        const items: ParsedProject[] = [];
         const localErrors: string[] = [];
 
-        dataRows.forEach((row, rowIndex) => {
+        rows.slice(1).forEach((row, rowIndex) => {
           const rowNum = rowIndex + 2;
-          const item: Record<string, any> = {};
-
-          // Initialize fields
-          item.projectCode = "";
-          item.projectName = "";
+          const item: ParsedProject = { projectCode: "", projectName: "" };
 
           row.forEach((cell, cellIndex) => {
             const propName = headerIndices[cellIndex];
-            if (propName) {
-              item[propName] = cell;
-            }
+            if (propName) item[propName] = cell;
           });
 
-          // Validation
-          if (!item.projectCode) {
-            localErrors.push(`แถวที่ ${rowNum}: ไม่ระบุรหัสโครงการ`);
-          }
-          if (!item.projectName) {
-            localErrors.push(`แถวที่ ${rowNum}: ไม่ระบุชื่อโครงการ`);
-          }
+          if (!item.projectCode) localErrors.push(`แถวที่ ${rowNum}: ไม่ระบุรหัสโครงการ`);
+          if (!item.projectName) localErrors.push(`แถวที่ ${rowNum}: ไม่ระบุชื่อโครงการ`);
 
           if (item.budgetRequested) {
             const cleanVal = String(item.budgetRequested).replace(/,/g, "").trim();
-            if (cleanVal && isNaN(Number(cleanVal))) {
+            if (cleanVal && Number.isNaN(Number(cleanVal))) {
               localErrors.push(`แถวที่ ${rowNum}: งบประมาณเสนอขอ '${item.budgetRequested}' ไม่ใช่ตัวเลขที่ถูกต้อง`);
             }
           }
@@ -305,36 +276,37 @@ export function ImportCsvButton() {
 
         setClientErrors(localErrors);
         setParsedData(items);
-      } catch (err: any) {
-        setClientErrors([`เกิดข้อผิดพลาดในการอ่านไฟล์: ${err.message}`]);
+      } catch (cause) {
+        const message = cause instanceof Error ? cause.message : "ไม่สามารถอ่านไฟล์ CSV ได้";
+        setClientErrors([`เกิดข้อผิดพลาดในการอ่านไฟล์: ${message}`]);
         setParsedData([]);
       }
     };
     reader.readAsText(file, "UTF-8");
   };
 
-  const handleDrag = (e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    if (e.type === "dragenter" || e.type === "dragover") {
-      setIsDragging(true);
-    } else if (e.type === "dragleave") {
-      setIsDragging(false);
-    }
+  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) processFile(file);
   };
 
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
+  const handleDrag = (event: React.DragEvent) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setIsDragging(event.type === "dragenter" || event.type === "dragover");
+  };
+
+  const handleDrop = (event: React.DragEvent) => {
+    event.preventDefault();
+    event.stopPropagation();
     setIsDragging(false);
 
-    const file = e.dataTransfer.files?.[0];
-    if (file) {
-      if (file.type === "text/csv" || file.name.endsWith(".csv")) {
-        processFile(file);
-      } else {
-        setClientErrors(["กรุณาเลือกไฟล์รูปแบบ CSV (.csv) เท่านั้น"]);
-      }
+    const file = event.dataTransfer.files?.[0];
+    if (!file) return;
+    if (file.type === "text/csv" || file.name.endsWith(".csv")) {
+      processFile(file);
+    } else {
+      setClientErrors(["กรุณาเลือกไฟล์รูปแบบ CSV (.csv) เท่านั้น"]);
     }
   };
 
@@ -352,14 +324,12 @@ export function ImportCsvButton() {
       });
 
       const data = await res.json();
-      setLoading(false);
-
       if (!res.ok) {
-        if (data.errors && Array.isArray(data.errors)) {
-          setServerErrors(data.errors);
-        } else {
-          setServerErrors([data.error || "เกิดข้อผิดพลาดไม่ทราบสาเหตุจากเซิร์ฟเวอร์"]);
-        }
+        setServerErrors(
+          data.errors && Array.isArray(data.errors)
+            ? data.errors
+            : [data.error || "เกิดข้อผิดพลาดไม่ทราบสาเหตุจากเซิร์ฟเวอร์"],
+        );
         return;
       }
 
@@ -367,9 +337,11 @@ export function ImportCsvButton() {
       setParsedData([]);
       setFileName("");
       router.refresh();
-    } catch (err: any) {
+    } catch (cause) {
+      const message = cause instanceof Error ? cause.message : "ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์ได้";
+      setServerErrors([message]);
+    } finally {
       setLoading(false);
-      setServerErrors([`ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์ได้: ${err.message}`]);
     }
   };
 
@@ -380,16 +352,14 @@ export function ImportCsvButton() {
     setServerErrors([]);
     setSuccessCount(null);
     setFileName("");
-    if (fileInputRef.current) {
-      fileInputRef.current.value = "";
-    }
+    if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
   return (
     <>
       <Button
         variant="outline"
-        className="flex w-full items-center gap-2 sm:w-auto"
+        className="flex w-full items-center gap-2 rounded-lg bg-background/90 sm:w-auto"
         onClick={() => setIsOpen(true)}
       >
         <Upload className="h-4 w-4" />
@@ -397,44 +367,40 @@ export function ImportCsvButton() {
       </Button>
 
       {isOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 transition-all duration-200">
-          <div className="bg-background border rounded-xl shadow-2xl max-w-4xl w-full max-h-[90vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-150">
-            {/* Modal Header */}
-            <div className="flex items-center justify-between px-6 py-4 border-b">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+          <div className="flex max-h-[90vh] w-full max-w-4xl flex-col overflow-hidden rounded-lg border bg-background shadow-2xl">
+            <div className="flex items-center justify-between border-b bg-muted/30 px-6 py-4">
               <div className="flex items-center gap-2">
                 <FileSpreadsheet className="h-5 w-5 text-emerald-600" />
-                <h2 className="text-lg font-semibold">นำเข้าโครงการผ่านไฟล์ CSV</h2>
+                <h2 className="text-lg font-bold">นำเข้าโครงการผ่านไฟล์ CSV</h2>
               </div>
-              <button onClick={resetState} className="text-muted-foreground hover:text-foreground transition-colors">
+              <button onClick={resetState} className="text-muted-foreground transition-colors hover:text-foreground" aria-label="ปิด">
                 <X className="h-5 w-5" />
               </button>
             </div>
 
-            {/* Modal Content */}
-            <div className="flex-1 overflow-y-auto p-6 space-y-6">
-              {/* Instructions and Download Template */}
-              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 p-4 rounded-lg bg-emerald-50 text-emerald-800 dark:bg-emerald-950/20 dark:text-emerald-300 border border-emerald-100 dark:border-emerald-900/30">
+            <div className="flex-1 space-y-6 overflow-y-auto p-6">
+              <div className="flex flex-col items-start justify-between gap-4 rounded-lg border border-emerald-100 bg-emerald-50 p-4 text-emerald-900 sm:flex-row sm:items-center">
                 <div className="space-y-1">
-                  <h4 className="font-semibold text-sm">การกรอกข้อมูลในไฟล์ CSV</h4>
-                  <p className="text-xs text-emerald-700/90 dark:text-emerald-400/90">
-                    หัวตารางต้องตรงตามเทมเพลต คอลัมน์ที่จำเป็นต้องระบุคือ <strong>รหัสโครงการ</strong> และ <strong>ชื่อโครงการ</strong>
+                  <h4 className="text-sm font-bold">การกรอกข้อมูลในไฟล์ CSV</h4>
+                  <p className="text-xs text-emerald-800/90">
+                    หัวตารางต้องตรงตามเทมเพลต โดยคอลัมน์บังคับคือ <strong>รหัสโครงการ</strong> และ <strong>ชื่อโครงการ</strong>
                   </p>
                 </div>
-                <Button size="sm" variant="outline" className="bg-white hover:bg-emerald-50 text-emerald-700 border-emerald-200 hover:border-emerald-300 gap-1.5 flex shrink-0" onClick={downloadTemplate}>
+                <Button size="sm" variant="outline" className="shrink-0 gap-1.5 bg-white text-emerald-700" onClick={downloadTemplate}>
                   <Download className="h-3.5 w-3.5" />
                   ดาวน์โหลดไฟล์แม่แบบ
                 </Button>
               </div>
 
-              {/* Drag and Drop Zone */}
-              {!fileName && !successCount && (
+              {!fileName && successCount === null && (
                 <div
                   onDragEnter={handleDrag}
                   onDragOver={handleDrag}
                   onDragLeave={handleDrag}
                   onDrop={handleDrop}
                   onClick={() => fileInputRef.current?.click()}
-                  className={`border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-all duration-150 flex flex-col items-center justify-center gap-3 ${
+                  className={`flex cursor-pointer flex-col items-center justify-center gap-3 rounded-lg border-2 border-dashed p-8 text-center transition-all ${
                     isDragging
                       ? "border-primary bg-primary/5 text-primary"
                       : "border-muted-foreground/25 hover:border-primary/55 hover:bg-muted/30"
@@ -447,105 +413,77 @@ export function ImportCsvButton() {
                     accept=".csv"
                     className="hidden"
                   />
-                  <div className="p-3 rounded-full bg-muted text-muted-foreground">
+                  <div className="rounded-full bg-muted p-3 text-muted-foreground">
                     <Upload className="h-6 w-6" />
                   </div>
                   <div className="space-y-1">
-                    <p className="font-medium text-sm">คลิกเพื่อเลือกไฟล์ หรือ ลากไฟล์ CSV มาวางที่นี่</p>
-                    <p className="text-xs text-muted-foreground">รองรับไฟล์รูปแบบ CSV (.csv) ขนาดไม่เกิน 5MB</p>
+                    <p className="text-sm font-semibold">คลิกเพื่อเลือกไฟล์ หรือลากไฟล์ CSV มาวางที่นี่</p>
+                    <p className="text-xs text-muted-foreground">รองรับไฟล์ CSV (.csv) ขนาดไม่เกิน 5MB</p>
                   </div>
                 </div>
               )}
 
-              {/* File Info */}
               {fileName && (
-                <div className="flex items-center justify-between p-3.5 rounded-lg border bg-muted/30">
+                <div className="flex items-center justify-between rounded-lg border bg-muted/30 p-3.5">
                   <div className="flex items-center gap-3">
                     <FileSpreadsheet className="h-8 w-8 text-emerald-600" />
                     <div>
-                      <p className="font-medium text-sm">{fileName}</p>
+                      <p className="text-sm font-semibold">{fileName}</p>
                       <p className="text-xs text-muted-foreground">ตรวจพบข้อมูลจำนวน {parsedData.length} โครงการ</p>
                     </div>
                   </div>
                   {!loading && (
-                    <Button variant="ghost" size="icon" onClick={() => { setFileName(""); setParsedData([]); setClientErrors([]); }}>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => {
+                        setFileName("");
+                        setParsedData([]);
+                        setClientErrors([]);
+                      }}
+                    >
                       <X className="h-4 w-4" />
                     </Button>
                   )}
                 </div>
               )}
 
-              {/* Success Screen */}
               {successCount !== null && (
-                <div className="flex flex-col items-center justify-center text-center p-8 space-y-4">
-                  <div className="p-3 bg-emerald-100 dark:bg-emerald-950/40 text-emerald-600 rounded-full animate-bounce">
+                <div className="flex flex-col items-center justify-center space-y-4 p-8 text-center">
+                  <div className="rounded-full bg-emerald-100 p-3 text-emerald-600">
                     <CheckCircle2 className="h-12 w-12" />
                   </div>
                   <div className="space-y-1">
-                    <h3 className="text-lg font-semibold">นำเข้าข้อมูลสำเร็จ</h3>
+                    <h3 className="text-lg font-bold">นำเข้าข้อมูลสำเร็จ</h3>
                     <p className="text-sm text-muted-foreground">นำเข้าโครงการเข้าระบบเรียบร้อยแล้วทั้งหมด {successCount} โครงการ</p>
                   </div>
                   <Button onClick={resetState}>ปิดหน้าต่าง</Button>
                 </div>
               )}
 
-              {/* Client Validation Errors */}
-              {clientErrors.length > 0 && (
-                <div className="p-4 rounded-lg bg-red-50 text-red-900 border border-red-200 dark:bg-red-950/20 dark:text-red-300 dark:border-red-900/30 space-y-2">
-                  <div className="flex items-center gap-2 font-semibold text-sm">
-                    <AlertTriangle className="h-4 w-4 text-red-600" />
-                    <span>พบข้อผิดพลาดจากข้อมูลในไฟล์ ({clientErrors.length} จุด)</span>
-                  </div>
-                  <ul className="text-xs list-disc pl-5 space-y-1 max-h-[160px] overflow-y-auto">
-                    {clientErrors.map((err, idx) => (
-                      <li key={idx}>{err}</li>
-                    ))}
-                  </ul>
-                  <p className="text-xs text-red-700/80 dark:text-red-400/80 mt-2 font-medium">
-                    *กรุณาแก้ไขข้อมูลในไฟล์ CSV ให้ถูกต้องแล้วอัปโหลดใหม่อีกครั้ง
-                  </p>
-                </div>
-              )}
+              <ErrorList title="พบข้อผิดพลาดจากข้อมูลในไฟล์" errors={clientErrors} icon={<AlertTriangle className="h-4 w-4 text-red-600" />} />
+              <ErrorList title="ไม่สามารถนำเข้าข้อมูลได้จากเซิร์ฟเวอร์" errors={serverErrors} icon={<AlertCircle className="h-4 w-4 text-red-600" />} />
 
-              {/* Server Validation Errors */}
-              {serverErrors.length > 0 && (
-                <div className="p-4 rounded-lg bg-red-50 text-red-900 border border-red-200 dark:bg-red-950/20 dark:text-red-300 dark:border-red-900/30 space-y-2">
-                  <div className="flex items-center gap-2 font-semibold text-sm">
-                    <AlertCircle className="h-4 w-4 text-red-600" />
-                    <span>ไม่สามารถนำเข้าข้อมูลได้ เนื่องจากตรวจพบข้อผิดพลาดบนเซิร์ฟเวอร์</span>
-                  </div>
-                  <ul className="text-xs list-disc pl-5 space-y-1 max-h-[200px] overflow-y-auto font-mono">
-                    {serverErrors.map((err, idx) => (
-                      <li key={idx}>{err}</li>
-                    ))}
-                  </ul>
-                  <p className="text-xs text-red-700/80 dark:text-red-400/80 mt-2 font-medium">
-                    *เนื่องจากโครงสร้างระบบความปลอดภัย ข้อมูลทั้งหมดจะไม่ถูกบันทึกหากมีจุดที่ผิดพลาด กรุณาแก้ไขไฟล์แล้วทำการอัปโหลดใหม่อีกครั้ง
-                  </p>
-                </div>
-              )}
-
-              {/* Preview Table */}
               {parsedData.length > 0 && clientErrors.length === 0 && serverErrors.length === 0 && (
                 <div className="space-y-2.5">
-                  <div className="flex justify-between items-center">
-                    <h3 className="font-semibold text-sm text-muted-foreground">ตัวอย่างตารางข้อมูลที่จะนำเข้า (แสดงสูงสุด 5 โครงการ)</h3>
+                  <div className="flex justify-between">
+                    <h3 className="text-sm font-bold text-muted-foreground">ตัวอย่างข้อมูลที่จะนำเข้า (แสดงสูงสุด 5 โครงการ)</h3>
                   </div>
-                  <div className="border rounded-lg overflow-hidden">
-                    <table className="w-full text-xs text-left">
+                  <div className="overflow-hidden rounded-lg border">
+                    <table className="w-full text-left text-xs">
                       <thead>
-                        <tr className="border-b bg-muted/50 font-medium text-muted-foreground">
+                        <tr className="border-b bg-muted/50 font-bold text-muted-foreground">
                           <th className="p-2.5">รหัสโครงการ</th>
                           <th className="p-2.5">ชื่อโครงการ</th>
                           <th className="p-2.5">ปีงบฯ</th>
                           <th className="p-2.5">ฝ่าย/กลุ่มงาน</th>
-                          <th className="p-2.5 text-right">งบเสนอขอ (บาท)</th>
+                          <th className="p-2.5 text-right">งบเสนอขอ</th>
                           <th className="p-2.5">ผู้รับผิดชอบ</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {parsedData.slice(0, 5).map((row, idx) => (
-                          <tr key={idx} className="border-b hover:bg-muted/10">
+                        {parsedData.slice(0, 5).map((row, index) => (
+                          <tr key={`${row.projectCode}-${index}`} className="border-b hover:bg-muted/10">
                             <td className="p-2.5 font-mono text-muted-foreground">{row.projectCode}</td>
                             <td className="p-2.5 font-medium">{row.projectName}</td>
                             <td className="p-2.5">{row.yearName || "(ปัจจุบัน)"}</td>
@@ -560,14 +498,13 @@ export function ImportCsvButton() {
                     </table>
                   </div>
                   {parsedData.length > 5 && (
-                    <p className="text-xs text-muted-foreground text-center">และอีก {parsedData.length - 5} โครงการ...</p>
+                    <p className="text-center text-xs text-muted-foreground">และอีก {parsedData.length - 5} โครงการ...</p>
                   )}
                 </div>
               )}
             </div>
 
-            {/* Modal Footer */}
-            <div className="px-6 py-4 border-t bg-muted/30 flex justify-end gap-2">
+            <div className="flex justify-end gap-2 border-t bg-muted/30 px-6 py-4">
               <Button variant="outline" onClick={resetState} disabled={loading}>
                 ยกเลิก
               </Button>
@@ -579,9 +516,7 @@ export function ImportCsvButton() {
                       กำลังนำเข้า...
                     </>
                   ) : (
-                    <>
-                      นำเข้าข้อมูล ({parsedData.length})
-                    </>
+                    <>นำเข้าข้อมูล ({parsedData.length})</>
                   )}
                 </Button>
               )}
@@ -590,5 +525,31 @@ export function ImportCsvButton() {
         </div>
       )}
     </>
+  );
+}
+
+function ErrorList({
+  title,
+  errors,
+  icon,
+}: {
+  title: string;
+  errors: string[];
+  icon: React.ReactNode;
+}) {
+  if (errors.length === 0) return null;
+
+  return (
+    <div className="space-y-2 rounded-lg border border-red-200 bg-red-50 p-4 text-red-900">
+      <div className="flex items-center gap-2 text-sm font-bold">
+        {icon}
+        <span>{title} ({errors.length} จุด)</span>
+      </div>
+      <ul className="max-h-[180px] list-disc space-y-1 overflow-y-auto pl-5 text-xs">
+        {errors.map((error, index) => (
+          <li key={`${error}-${index}`}>{error}</li>
+        ))}
+      </ul>
+    </div>
   );
 }

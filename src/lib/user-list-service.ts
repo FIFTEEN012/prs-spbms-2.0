@@ -26,6 +26,7 @@ const userSortFields = [
   "username",
   "role",
   "createdAt",
+  "updatedAt",
 ] as const;
 
 const userSortBySchema = createSortBySchema(userSortFields, "fullName");
@@ -54,11 +55,32 @@ export type UserListRow = {
     id: string;
     name: string;
   } | null;
+  createdAt: string;
+  updatedAt: string;
+  counts: {
+    responsibleProjects: number;
+    createdPurchaseRequests: number;
+    approvals: number;
+    auditLogs: number;
+  };
 };
 
 type UserListFilters = Omit<UserListQueryValues, "page" | "limit"> & {
   page: number;
   limit: number;
+};
+
+export type UserListSummary = {
+  total: number;
+  superAdmins: number;
+  executives: number;
+  teachersAndHeads: number;
+  financeAndProcurement: number;
+  inactive: number;
+};
+
+export type UserListResult = PaginatedResult<UserListRow, UserListQueryValues> & {
+  summary: UserListSummary;
 };
 
 export const defaultUserListQueryValues: UserListQueryValues = {
@@ -113,6 +135,7 @@ function buildUserWhere(filters: UserListFilters): Prisma.UserWhereInput {
         { username: { contains: filters.q, mode: "insensitive" } },
         { email: { contains: filters.q, mode: "insensitive" } },
         { phone: { contains: filters.q, mode: "insensitive" } },
+        { department: { name: { contains: filters.q, mode: "insensitive" } } },
       ],
     });
   }
@@ -134,16 +157,29 @@ function buildUserWhere(filters: UserListFilters): Prisma.UserWhereInput {
 
 export async function getUserList(
   source: SearchParamsSource,
-): Promise<PaginatedResult<UserListRow, UserListQueryValues>> {
+): Promise<UserListResult> {
   const filters = parseUserListFilters(source);
   const where = buildUserWhere(filters);
-  const total = await prisma.user.count({ where });
+  const [total, summaryCounts] = await Promise.all([
+    prisma.user.count({ where }),
+    getUserListSummary(),
+  ]);
   const totalPages = Math.max(1, Math.ceil(total / filters.limit));
   const page = Math.min(filters.page, totalPages);
 
   const users = await prisma.user.findMany({
     where,
-    include: { department: true },
+    include: {
+      department: { select: { id: true, name: true } },
+      _count: {
+        select: {
+          responsibleProjects: true,
+          createdPurchaseRequests: true,
+          approvals: true,
+          auditLogs: true,
+        },
+      },
+    },
     orderBy: { [filters.sortBy]: filters.sortDir },
     skip: getPaginationSkip(page, filters.limit),
     take: filters.limit,
@@ -158,6 +194,14 @@ export async function getUserList(
     role: user.role,
     departmentId: user.departmentId,
     isActive: user.isActive,
+    createdAt: user.createdAt.toISOString(),
+    updatedAt: user.updatedAt.toISOString(),
+    counts: {
+      responsibleProjects: user._count.responsibleProjects,
+      createdPurchaseRequests: user._count.createdPurchaseRequests,
+      approvals: user._count.approvals,
+      auditLogs: user._count.auditLogs,
+    },
     department: user.department
       ? { id: user.department.id, name: user.department.name }
       : null,
@@ -170,5 +214,27 @@ export async function getUserList(
     limit: filters.limit,
     totalPages,
     filters: toUserListQueryValues({ ...filters, page }),
+    summary: summaryCounts,
+  };
+}
+
+async function getUserListSummary(): Promise<UserListSummary> {
+  const [total, superAdmins, executives, teachersAndHeads, financeAndProcurement, inactive] =
+    await Promise.all([
+      prisma.user.count(),
+      prisma.user.count({ where: { role: "SUPER_ADMIN" } }),
+      prisma.user.count({ where: { role: "EXECUTIVE" } }),
+      prisma.user.count({ where: { role: { in: ["TEACHER", "DEPT_HEAD"] } } }),
+      prisma.user.count({ where: { role: { in: ["FINANCE", "PROCUREMENT"] } } }),
+      prisma.user.count({ where: { isActive: false } }),
+    ]);
+
+  return {
+    total,
+    superAdmins,
+    executives,
+    teachersAndHeads,
+    financeAndProcurement,
+    inactive,
   };
 }

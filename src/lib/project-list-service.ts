@@ -1,5 +1,11 @@
 import { Prisma, type ProjectStatus } from "@prisma/client";
-import { canEditProject, canReadProject, type Actor } from "@/lib/authorization";
+import {
+  canActOnProject,
+  canEditProject,
+  canReadProject,
+  canViewProjectBudgetHistory,
+  type Actor,
+} from "@/lib/authorization";
 import { summarizeProjectBudget } from "@/lib/budget-summary";
 import {
   createSortBySchema,
@@ -40,6 +46,9 @@ export type ProjectListQueryValues = {
   q: string;
   status: string;
   departmentId: string;
+  academicYearId: string;
+  responsibleUserId: string;
+  mine: string;
   sortBy: (typeof projectSortFields)[number];
   sortDir: "asc" | "desc";
   page: string;
@@ -51,6 +60,7 @@ export type ProjectRow = {
   projectCode: string;
   projectName: string;
   departmentName: string;
+  responsibleUserId: string | null;
   responsibleFullName: string;
   budgetRequested: number;
   budgetApproved: number;
@@ -60,8 +70,16 @@ export type ProjectRow = {
   historyCount: number;
   startDate: string | null;
   endDate: string | null;
+  updatedAt: string;
   status: string;
   canDelete: boolean;
+  canEdit: boolean;
+  canSubmit: boolean;
+  canReviewApprove: boolean;
+  canApprove: boolean;
+  canReject: boolean;
+  canViewBudgetHistory: boolean;
+  canCreatePurchaseRequest: boolean;
   activities: Array<{
     id: string;
     name: string;
@@ -73,6 +91,15 @@ export type ProjectRow = {
   }>;
 };
 
+export type ProjectListSummary = {
+  total: number;
+  mine: number;
+  draft: number;
+  pending: number;
+  approved: number;
+  rejected: number;
+};
+
 export type ProjectListFilters = Omit<ProjectListQueryValues, "page" | "limit"> & {
   page: number;
   limit: number;
@@ -82,6 +109,9 @@ export const defaultProjectListQueryValues: ProjectListQueryValues = {
   q: "",
   status: "",
   departmentId: "",
+  academicYearId: "",
+  responsibleUserId: "",
+  mine: "",
   sortBy: "createdAt",
   sortDir: "desc",
   page: "1",
@@ -94,6 +124,11 @@ function parseProjectStatus(source: SearchParamsSource) {
   return projectStatuses.includes(value as ProjectStatus) ? value : undefined;
 }
 
+function parseBooleanFlagParam(source: SearchParamsSource, key: string) {
+  const value = parseOptionalStringParam(source, key);
+  return value === "1" ? "1" : "";
+}
+
 export function parseProjectListFilters(
   source: SearchParamsSource,
 ): ProjectListFilters {
@@ -104,6 +139,9 @@ export function parseProjectListFilters(
     q: parseOptionalStringParam(source, "q") ?? "",
     status: parseProjectStatus(source) ?? "",
     departmentId: parseOptionalStringParam(source, "departmentId") ?? "",
+    academicYearId: parseOptionalStringParam(source, "academicYearId") ?? "",
+    responsibleUserId: parseOptionalStringParam(source, "responsibleUserId") ?? "",
+    mine: parseBooleanFlagParam(source, "mine"),
     sortBy: projectSortBySchema.parse(record.sortBy),
     sortDir: sortDirectionSchema.parse(record.sortDir),
     page: pagination.page,
@@ -118,6 +156,9 @@ export function toProjectListQueryValues(
     q: filters.q,
     status: filters.status,
     departmentId: filters.departmentId,
+    academicYearId: filters.academicYearId,
+    responsibleUserId: filters.responsibleUserId,
+    mine: filters.mine,
     sortBy: filters.sortBy,
     sortDir: filters.sortDir,
     page: String(filters.page),
@@ -187,6 +228,18 @@ function buildProjectWhere(
     clauses.push({ departmentId: filters.departmentId });
   }
 
+  if (filters.academicYearId) {
+    clauses.push({ academicYearId: filters.academicYearId });
+  }
+
+  if (filters.responsibleUserId) {
+    clauses.push({ responsibleUserId: filters.responsibleUserId });
+  }
+
+  if (filters.mine === "1") {
+    clauses.push({ responsibleUserId: actor.id });
+  }
+
   return { AND: clauses };
 }
 
@@ -220,10 +273,29 @@ function getActivitySpendKey(projectId: string, activityId: string) {
 export async function getProjectList(
   actor: Actor,
   source: SearchParamsSource,
-): Promise<PaginatedResult<ProjectRow, ProjectListQueryValues>> {
+): Promise<
+  PaginatedResult<ProjectRow, ProjectListQueryValues> & {
+    summary: ProjectListSummary;
+  }
+> {
   const filters = parseProjectListFilters(source);
   const where = buildProjectWhere(actor, filters);
-  const total = await prisma.project.count({ where });
+  const summaryWhere = buildProjectWhere(actor, { ...filters, status: "" });
+  const mineWhere = buildProjectWhere(actor, {
+    ...filters,
+    status: "",
+    responsibleUserId: "",
+    mine: "1",
+  });
+  const [total, mineTotal, summaryGroups] = await Promise.all([
+    prisma.project.count({ where }),
+    prisma.project.count({ where: mineWhere }),
+    prisma.project.groupBy({
+      by: ["status"],
+      where: summaryWhere,
+      _count: { _all: true },
+    }),
+  ]);
   const totalPages = Math.max(1, Math.ceil(total / filters.limit));
   const page = Math.min(filters.page, totalPages);
 
@@ -233,10 +305,15 @@ export async function getProjectList(
     skip: getPaginationSkip(page, filters.limit),
     take: filters.limit,
     include: {
-      department: true,
-      responsibleUser: true,
-      academicYear: true,
-      activities: true,
+      department: { select: { name: true } },
+      responsibleUser: { select: { fullName: true } },
+      activities: {
+        select: {
+          id: true,
+          name: true,
+          budget: true,
+        },
+      },
     },
   });
 
@@ -377,6 +454,7 @@ export async function getProjectList(
         projectCode: project.projectCode,
         projectName: project.projectName,
         departmentName: project.department?.name ?? "-",
+        responsibleUserId: project.responsibleUserId,
         responsibleFullName: project.responsibleUser?.fullName ?? "-",
         budgetRequested: Number(project.budgetRequested),
         budgetApproved: Number(project.budgetApproved),
@@ -386,12 +464,47 @@ export async function getProjectList(
         historyCount: budget.historyCount,
         startDate: project.startDate ? project.startDate.toISOString() : null,
         endDate: project.endDate ? project.endDate.toISOString() : null,
+        updatedAt: project.updatedAt.toISOString(),
         status: project.status,
-        canDelete:
-          actor.role === "SUPER_ADMIN" || canEditProject(actor, project),
+        canDelete: actor.role === "SUPER_ADMIN" || canEditProject(actor, project),
+        canEdit: canEditProject(actor, project),
+        canSubmit:
+          project.status === "DRAFT" &&
+          canActOnProject(actor, project, "submit"),
+        canReviewApprove:
+          project.status === "SUBMITTED" &&
+          canActOnProject(actor, project, "dept_approve"),
+        canApprove:
+          project.status === "REVIEWED" &&
+          canActOnProject(actor, project, "executive_approve"),
+        canReject:
+          (project.status === "SUBMITTED" || project.status === "REVIEWED") &&
+          canActOnProject(actor, project, "reject_to_draft"),
+        canViewBudgetHistory: canViewProjectBudgetHistory(actor, project),
+        canCreatePurchaseRequest:
+          actor.role === "SUPER_ADMIN" ||
+          (actor.role === "PROCUREMENT" &&
+            (project.status === "APPROVED" ||
+              project.status === "IN_PROGRESS" ||
+              project.status === "COMPLETED")),
         activities,
       };
     });
+
+  const statusCounts = new Map(
+    summaryGroups.map((group) => [group.status, group._count._all]),
+  );
+  const summary: ProjectListSummary = {
+    total: summaryGroups.reduce((sum, group) => sum + group._count._all, 0),
+    mine: mineTotal,
+    draft: statusCounts.get("DRAFT") ?? 0,
+    pending: (statusCounts.get("SUBMITTED") ?? 0) + (statusCounts.get("REVIEWED") ?? 0),
+    approved:
+      (statusCounts.get("APPROVED") ?? 0) +
+      (statusCounts.get("IN_PROGRESS") ?? 0) +
+      (statusCounts.get("COMPLETED") ?? 0),
+    rejected: statusCounts.get("REJECTED") ?? 0,
+  };
 
   return {
     data,
@@ -400,5 +513,6 @@ export async function getProjectList(
     limit: filters.limit,
     totalPages,
     filters: toProjectListQueryValues({ ...filters, page }),
+    summary,
   };
 }

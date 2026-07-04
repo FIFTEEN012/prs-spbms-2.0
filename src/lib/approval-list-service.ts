@@ -1,5 +1,5 @@
 import type { Actor } from "@/lib/authorization";
-import type { Prisma } from "@prisma/client";
+import type { Prisma, ProjectStatus } from "@prisma/client";
 import {
   createSortBySchema,
   getPaginationSkip,
@@ -12,12 +12,25 @@ import {
 } from "@/lib/list-filters";
 import { prisma } from "@/lib/prisma";
 
-const approvalStatuses = ["SUBMITTED", "REVIEWED"] as const;
+const queueApprovalStatuses = ["SUBMITTED", "REVIEWED"] as const;
+const approvalStatuses = [
+  "DRAFT",
+  "SUBMITTED",
+  "REVIEWED",
+  "APPROVED",
+  "REJECTED",
+  "IN_PROGRESS",
+  "COMPLETED",
+  "CANCELLED",
+] as const satisfies readonly ProjectStatus[];
 const approvalSortFields = [
+  "createdAt",
   "updatedAt",
   "projectName",
   "projectCode",
   "budgetRequested",
+  "budgetApproved",
+  "status",
 ] as const;
 const approvalSortBySchema = createSortBySchema(
   approvalSortFields,
@@ -26,6 +39,7 @@ const approvalSortBySchema = createSortBySchema(
 
 export type ApprovalQueueQueryValues = {
   q: string;
+  projectCode: string;
   status: string;
   departmentId: string;
   sortBy: (typeof approvalSortFields)[number];
@@ -41,8 +55,19 @@ export type ApprovalQueueRow = {
   budgetRequested: number;
   status: string;
   updatedAt: string;
+  objectives: string | null;
+  startDate: string | null;
+  endDate: string | null;
   department: { name: string } | null;
   responsibleUser: { fullName: string } | null;
+};
+
+export type ApprovalQueueSummary = {
+  total: number;
+  submitted: number;
+  reviewed: number;
+  pending: number;
+  totalBudgetRequested: number;
 };
 
 type ApprovalQueueFilters = Omit<ApprovalQueueQueryValues, "page" | "limit"> & {
@@ -52,6 +77,7 @@ type ApprovalQueueFilters = Omit<ApprovalQueueQueryValues, "page" | "limit"> & {
 
 export const defaultApprovalQueueQueryValues: ApprovalQueueQueryValues = {
   q: "",
+  projectCode: "",
   status: "",
   departmentId: "",
   sortBy: "updatedAt",
@@ -69,6 +95,7 @@ export function parseApprovalQueueFilters(
 
   return {
     q: parseOptionalStringParam(source, "q") ?? "",
+    projectCode: parseOptionalStringParam(source, "projectCode") ?? "",
     status: status &&
       approvalStatuses.includes(status as (typeof approvalStatuses)[number])
       ? status
@@ -86,6 +113,7 @@ export function toApprovalQueueQueryValues(
 ): ApprovalQueueQueryValues {
   return {
     q: filters.q,
+    projectCode: filters.projectCode,
     status: filters.status,
     departmentId: filters.departmentId,
     sortBy: filters.sortBy,
@@ -95,20 +123,23 @@ export function toApprovalQueueQueryValues(
   };
 }
 
-function getApprovalScope(actor: Actor): Prisma.ProjectWhereInput {
+function getApprovalScope(
+  actor: Actor,
+  filters: ApprovalQueueFilters,
+): Prisma.ProjectWhereInput {
   if (actor.role === "SUPER_ADMIN") {
-    return { status: { in: [...approvalStatuses] } };
+    return filters.status ? {} : { status: { in: [...queueApprovalStatuses] } };
   }
 
   if (actor.role === "DEPT_HEAD") {
     return {
-      status: "SUBMITTED",
+      ...(filters.status ? {} : { status: "SUBMITTED" }),
       ...(actor.departmentId ? { departmentId: actor.departmentId } : {}),
     };
   }
 
   if (actor.role === "EXECUTIVE") {
-    return { status: "REVIEWED" };
+    return filters.status ? {} : { status: "REVIEWED" };
   }
 
   return { id: "__no_access__" };
@@ -118,7 +149,9 @@ function buildApprovalQueueWhere(
   actor: Actor,
   filters: ApprovalQueueFilters,
 ): Prisma.ProjectWhereInput {
-  const clauses: Prisma.ProjectWhereInput[] = [getApprovalScope(actor)];
+  const clauses: Prisma.ProjectWhereInput[] = [
+    getApprovalScope(actor, filters),
+  ];
 
   if (filters.q) {
     clauses.push({
@@ -136,8 +169,14 @@ function buildApprovalQueueWhere(
     });
   }
 
+  if (filters.projectCode) {
+    clauses.push({
+      projectCode: { contains: filters.projectCode, mode: "insensitive" },
+    });
+  }
+
   if (filters.status) {
-    clauses.push({ status: filters.status as "SUBMITTED" | "REVIEWED" });
+    clauses.push({ status: filters.status as ProjectStatus });
   }
 
   if (filters.departmentId) {
@@ -150,12 +189,30 @@ function buildApprovalQueueWhere(
 export async function getApprovalQueue(
   actor: Actor,
   source: SearchParamsSource,
-): Promise<PaginatedResult<ApprovalQueueRow, ApprovalQueueQueryValues>> {
+): Promise<
+  PaginatedResult<ApprovalQueueRow, ApprovalQueueQueryValues> & {
+    summary: ApprovalQueueSummary;
+  }
+> {
   const filters = parseApprovalQueueFilters(source);
   const where = buildApprovalQueueWhere(actor, filters);
-  const total = await prisma.project.count({ where });
+  const [total, summaryGroups, budgetAggregate] = await Promise.all([
+    prisma.project.count({ where }),
+    prisma.project.groupBy({
+      by: ["status"],
+      where,
+      _count: { _all: true },
+    }),
+    prisma.project.aggregate({
+      where,
+      _sum: { budgetRequested: true },
+    }),
+  ]);
   const totalPages = Math.max(1, Math.ceil(total / filters.limit));
   const page = Math.min(filters.page, totalPages);
+  const statusCounts = new Map(
+    summaryGroups.map((group) => [group.status, group._count._all]),
+  );
 
   const projects = await prisma.project.findMany({
     where,
@@ -173,11 +230,23 @@ export async function getApprovalQueue(
       budgetRequested: Number(project.budgetRequested),
       status: project.status,
       updatedAt: project.updatedAt.toISOString(),
+      objectives: project.objectives,
+      startDate: project.startDate?.toISOString() ?? null,
+      endDate: project.endDate?.toISOString() ?? null,
       department: project.department ? { name: project.department.name } : null,
       responsibleUser: project.responsibleUser
         ? { fullName: project.responsibleUser.fullName }
         : null,
     })),
+    summary: {
+      total,
+      submitted: statusCounts.get("SUBMITTED") ?? 0,
+      reviewed: statusCounts.get("REVIEWED") ?? 0,
+      pending:
+        (statusCounts.get("SUBMITTED") ?? 0) +
+        (statusCounts.get("REVIEWED") ?? 0),
+      totalBudgetRequested: Number(budgetAggregate._sum.budgetRequested ?? 0),
+    },
     total,
     page,
     limit: filters.limit,

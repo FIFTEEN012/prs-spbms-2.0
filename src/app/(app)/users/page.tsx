@@ -1,7 +1,7 @@
 import { getServerSession } from "next-auth";
 import { redirect } from "next/navigation";
 import { authOptions } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
+import { getDepartmentsReference } from "@/lib/reference-data";
 import {
   getUserList,
   type UserListQueryValues,
@@ -20,9 +20,7 @@ export default async function UsersPage({
   const resolvedSearchParams = await searchParams;
   const [userList, departments] = await Promise.all([
     getUserList(resolvedSearchParams),
-    prisma.department.findMany({
-      orderBy: { name: "asc" },
-    }),
+    getDepartmentsReference(),
   ]);
 
   return (
@@ -38,6 +36,7 @@ export default async function UsersPage({
       limit={userList.limit}
       totalPages={userList.totalPages}
       initialQuery={userList.filters}
+      summary={userList.summary}
     />
   );
 }

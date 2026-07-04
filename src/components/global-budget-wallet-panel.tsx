@@ -114,11 +114,11 @@ export function GlobalBudgetWalletPanel() {
   return (
     <div className="fixed bottom-[max(1rem,env(safe-area-inset-bottom))] right-4 z-40 w-[calc(100vw-2rem)] max-w-5xl print:hidden md:right-6">
       {expanded && (
-        <div className="mb-3 max-h-[min(72vh,42rem)] overflow-hidden rounded-lg border border-border/80 bg-background shadow-2xl">
-          <div className="flex items-start justify-between gap-3 border-b border-border/70 bg-muted/30 p-4">
+        <div className="mb-3 max-h-[min(72vh,42rem)] overflow-hidden rounded-lg border border-border/80 bg-background/95 shadow-2xl backdrop-blur-xl">
+          <div className="flex items-start justify-between gap-3 border-b border-border/70 bg-muted/45 p-4">
             <div className="min-w-0">
               <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
-                <WalletCards className="size-4 text-emerald-700" />
+                <WalletCards className="size-4 text-primary" />
                 ยอดกระเป๋างบประมาณ
               </div>
               <div className="mt-1 truncate text-xs text-muted-foreground">
@@ -140,14 +140,14 @@ export function GlobalBudgetWalletPanel() {
 
           <div className="max-h-[calc(min(72vh,42rem)-5rem)] overflow-auto p-4">
             {error && (
-              <div className="mb-3 flex items-center gap-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
+              <div className="mb-3 flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
                 <AlertCircle className="size-4 shrink-0" />
                 {error}
               </div>
             )}
 
             {!error && !hasWallets && (
-              <div className="rounded-md border border-dashed border-border bg-muted/20 px-4 py-6 text-center text-sm text-muted-foreground">
+              <div className="rounded-lg border border-dashed border-border bg-muted/20 px-4 py-6 text-center text-sm text-muted-foreground">
                 ยังไม่มีข้อมูลกระเป๋างบที่แสดงได้
               </div>
             )}
@@ -158,7 +158,7 @@ export function GlobalBudgetWalletPanel() {
                   <Link
                     key={wallet.id}
                     href={`/budget-wallets/${wallet.id}`}
-                    className="rounded-lg border border-border bg-card p-4 shadow-sm transition hover:border-emerald-300 hover:shadow-md"
+                    className="rounded-lg border border-border bg-card/90 p-4 shadow-sm transition hover:border-primary/30 hover:shadow-md"
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
@@ -193,7 +193,7 @@ export function GlobalBudgetWalletPanel() {
         </div>
       )}
 
-      <div className="ml-auto rounded-lg border border-border/80 bg-background/95 p-2 shadow-2xl backdrop-blur supports-[backdrop-filter]:bg-background/85 md:max-w-3xl">
+      <div className="ml-auto rounded-lg border border-border/80 bg-background/90 p-2 shadow-2xl backdrop-blur-xl md:max-w-3xl">
         <button
           type="button"
           className="flex w-full items-center justify-between gap-3 rounded-md px-2 py-2 text-left hover:bg-muted/70"
@@ -201,7 +201,7 @@ export function GlobalBudgetWalletPanel() {
           aria-expanded={expanded}
         >
           <div className="flex min-w-0 items-center gap-2">
-            <span className="inline-flex size-9 shrink-0 items-center justify-center rounded-md bg-emerald-50 text-emerald-700">
+            <span className="inline-flex size-9 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
               <WalletCards className="size-5" />
             </span>
             <div className="min-w-0">
@@ -219,7 +219,7 @@ export function GlobalBudgetWalletPanel() {
             <button
               key={wallet.id}
               type="button"
-              className="rounded-md border border-border bg-card px-3 py-2 text-left hover:border-emerald-300"
+              className="rounded-md border border-border bg-card/90 px-3 py-2 text-left hover:border-primary/30"
               onClick={() => setExpanded(true)}
             >
               <div className="truncate text-xs font-medium text-muted-foreground">{wallet.name}</div>

@@ -1,6 +1,8 @@
 "use client";
+
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { Loader2, PencilLine } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { StatusAlert } from "@/components/ui/status-alert";
@@ -16,56 +18,73 @@ export function BudgetEntry({ projectId, max }: { projectId: string; max: number
   async function submit() {
     setMessage(null);
     setError(null);
-    const n = Number(amount);
-    if (!n || n <= 0) {
-      setError("กรุณาระบุจำนวนเงิน");
+
+    const numericAmount = Number(amount);
+    if (!numericAmount || numericAmount <= 0) {
+      setError("กรุณาระบุจำนวนเงินที่ต้องการบันทึก");
       return;
     }
-    if (n > max) {
-      setError(`เกินงบคงเหลือ (สูงสุด ${max.toLocaleString()} บาท)`);
+
+    if (numericAmount > max) {
+      setError(`เกินวงเงินคงเหลือของโครงการ (สูงสุด ${max.toLocaleString()} บาท)`);
       return;
     }
+
     setLoading(true);
-    const res = await fetch("/api/budget-transactions", {
+    const response = await fetch("/api/budget-transactions", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ projectId, amount: n, description: desc, transactionType: "EXPENSE" }),
+      body: JSON.stringify({
+        projectId,
+        amount: numericAmount,
+        description: desc,
+        transactionType: "EXPENSE",
+      }),
     });
     setLoading(false);
-    if (!res.ok) {
-      const j = await res.json().catch(() => ({}));
-      setError(j.error ?? "บันทึกไม่สำเร็จ");
+
+    if (!response.ok) {
+      const payload = await response.json().catch(() => ({}));
+      setError(payload.error ?? "บันทึกรายการไม่สำเร็จ");
       return;
     }
+
     setAmount("");
     setDesc("");
-    setMessage("บันทึกรายการงบประมาณแล้ว");
+    setMessage("บันทึกค่าใช้จ่ายของโครงการเรียบร้อยแล้ว");
     router.refresh();
   }
 
   return (
-    <div className="space-y-2">
-      <div className="flex flex-wrap items-center gap-2">
+    <div className="space-y-2.5">
+      <div className="grid gap-2 lg:grid-cols-[118px_minmax(0,1fr)_104px]">
         <Input
           type="number"
           step="0.01"
-          placeholder="จำนวน"
+          placeholder="จำนวนเงิน"
           value={amount}
-          onChange={(e) => setAmount(e.target.value)}
-          className="h-8 w-28"
+          onChange={(event) => setAmount(event.target.value)}
+          className="h-10 rounded-lg border-outline-variant bg-white"
         />
         <Input
-          placeholder="รายการ"
+          placeholder="รายละเอียดรายการเบิกจ่าย"
           value={desc}
-          onChange={(e) => setDesc(e.target.value)}
-          className="h-8 w-40"
+          onChange={(event) => setDesc(event.target.value)}
+          className="h-10 rounded-lg border-outline-variant bg-white"
         />
-        <Button size="sm" onClick={submit} disabled={loading}>
+        <Button
+          size="sm"
+          onClick={submit}
+          disabled={loading}
+          className="h-10 rounded-lg text-sm font-bold shadow-sm"
+        >
+          {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <PencilLine className="h-4 w-4" />}
           บันทึก
         </Button>
       </div>
-      {error && <StatusAlert variant="error">{error}</StatusAlert>}
-      {message && <StatusAlert variant="success">{message}</StatusAlert>}
+
+      {error ? <StatusAlert variant="error">{error}</StatusAlert> : null}
+      {message ? <StatusAlert variant="success">{message}</StatusAlert> : null}
     </div>
   );
 }

@@ -2,15 +2,8 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { AlertTriangle, CheckCircle2, FileText, Loader2, Send, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import {
-  Send,
-  Loader2,
-  X,
-  AlertTriangle,
-  CheckCircle2,
-  FileText,
-} from "lucide-react";
 import { formatBaht } from "@/lib/utils";
 
 type DraftProjectType = {
@@ -36,13 +29,11 @@ export function BulkSubmitButton({ draftProjects }: BulkSubmitButtonProps) {
     setError(null);
     setSuccess(null);
 
-    const projectIds = draftProjects.map((p) => p.id);
-
     try {
       const res = await fetch("/api/projects/bulk-submit", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ projectIds }),
+        body: JSON.stringify({ projectIds: draftProjects.map((project) => project.id) }),
       });
 
       const data = await res.json();
@@ -50,17 +41,14 @@ export function BulkSubmitButton({ draftProjects }: BulkSubmitButtonProps) {
         throw new Error(data.error || "เกิดข้อผิดพลาดในการส่งขออนุมัติ");
       }
 
-      setSuccess(`ส่งขออนุมัติโครงการทั้งหมดสำเร็จจำนวน ${data.count} โครงการเรียบร้อยแล้ว`);
-      
-      // Refresh Next.js server component state
+      setSuccess(`ส่งขออนุมัติโครงการสำเร็จ ${data.count} โครงการ`);
       router.refresh();
 
-      // Keep the success state visible briefly while the refreshed server data loads.
       setTimeout(() => {
         setIsOpen(false);
       }, 1500);
-    } catch (err: any) {
-      setError(err.message);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "เกิดข้อผิดพลาดในการส่งขออนุมัติ");
     } finally {
       setLoading(false);
     }
@@ -81,107 +69,98 @@ export function BulkSubmitButton({ draftProjects }: BulkSubmitButtonProps) {
           setSuccess(null);
           setIsOpen(true);
         }}
-        className="flex w-full items-center justify-center gap-1.5 rounded-xl bg-amber-600 px-4 py-2 font-bold text-white shadow-md transition-all hover:bg-amber-700 sm:w-auto"
+        className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-amber-600 px-4 py-2 font-bold text-white shadow-sm transition-all hover:bg-amber-700 sm:w-auto"
       >
         <Send className="h-4 w-4" />
         ส่งขออนุมัติทั้งหมด ({draftProjects.length})
       </Button>
 
       {isOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 transition-all duration-200">
-          <div className="bg-background border rounded-xl shadow-2xl max-w-lg w-full flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-150">
-            
-            {/* Modal Header */}
-            <div className="flex items-center justify-between px-6 py-4 border-b">
-              <h2 className="text-lg font-semibold flex items-center gap-2 text-amber-700 dark:text-amber-500">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+          <div className="flex max-h-[85vh] w-full max-w-lg flex-col overflow-hidden rounded-lg border bg-background shadow-2xl">
+            <div className="flex items-center justify-between border-b bg-muted/30 px-6 py-4">
+              <h2 className="flex items-center gap-2 text-lg font-bold text-amber-700">
                 <Send className="h-5 w-5" />
-                ยืนยันการส่งขออนุมัติโครงการทั้งหมด
+                ยืนยันการส่งขออนุมัติโครงการ
               </h2>
               <button
                 onClick={handleClose}
-                className="text-muted-foreground hover:text-foreground transition-colors"
+                className="text-muted-foreground transition-colors hover:text-foreground"
                 disabled={loading}
+                aria-label="ปิด"
               >
                 <X className="h-5 w-5" />
               </button>
             </div>
 
-            {/* Modal Body */}
-            <div className="p-6 space-y-4 max-h-[80vh] overflow-y-auto">
+            <div className="max-h-[80vh] space-y-4 overflow-y-auto p-6">
               {error && (
-                <div className="p-3 bg-destructive/10 text-destructive rounded-lg flex items-start gap-2 text-xs font-medium border border-destructive/20">
-                  <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+                <div className="flex items-start gap-2 rounded-lg border border-destructive/20 bg-destructive/10 p-3 text-xs font-medium text-destructive">
+                  <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
                   <span>{error}</span>
                 </div>
               )}
 
               {success && (
-                <div className="p-4 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-xl flex items-center gap-3 animate-in fade-in duration-300">
-                  <CheckCircle2 className="h-5 w-5 text-emerald-600 shrink-0" />
-                  <span className="text-sm font-semibold">{success}</span>
+                <div className="flex items-center gap-3 rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-emerald-800">
+                  <CheckCircle2 className="h-5 w-5 shrink-0 text-emerald-600" />
+                  <span className="text-sm font-bold">{success}</span>
                 </div>
               )}
 
               {!success && (
                 <>
-                  <p className="text-sm text-foreground leading-relaxed">
-                    คุณแน่ใจหรือไม่ว่าต้องการส่งขออนุมัติโครงการร่างทั้งหมดจำนวน 
-                    <strong className="text-amber-700 dark:text-amber-400 font-bold mx-1 text-base">
+                  <p className="text-sm leading-relaxed text-foreground">
+                    ต้องการส่งโครงการร่างจำนวน
+                    <strong className="mx-1 text-base font-bold text-amber-700">
                       {draftProjects.length} โครงการ
-                    </strong> 
-                    โครงการเหล่านี้จะถูกส่งไปยังขั้นตอนการตรวจสอบของหัวหน้ากลุ่มงาน
+                    </strong>
+                    เข้าสู่ขั้นตอนตรวจสอบของหัวหน้ากลุ่มงานหรือไม่
                   </p>
 
-                  <div className="border rounded-lg overflow-hidden max-h-[200px] overflow-y-auto">
-                    <table className="w-full text-xs text-left">
+                  <div className="max-h-[200px] overflow-y-auto rounded-lg border">
+                    <table className="w-full text-left text-xs">
                       <thead>
-                        <tr className="border-b bg-muted/50 font-medium text-muted-foreground">
+                        <tr className="border-b bg-muted/50 font-bold text-muted-foreground">
                           <th className="p-2.5">รหัสโครงการ</th>
                           <th className="p-2.5">ชื่อโครงการ</th>
-                          <th className="p-2.5 text-right">งบเสนอขอ (บาท)</th>
+                          <th className="p-2.5 text-right">งบเสนอขอ</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {draftProjects.map((p) => (
-                          <tr key={p.id} className="border-b hover:bg-muted/10 font-medium text-foreground/90">
-                            <td className="p-2.5 font-mono text-muted-foreground">{p.projectCode}</td>
-                            <td className="p-2.5">{p.projectName}</td>
-                            <td className="p-2.5 text-right">{formatBaht(p.budgetRequested)}</td>
+                        {draftProjects.map((project) => (
+                          <tr key={project.id} className="border-b hover:bg-muted/10">
+                            <td className="p-2.5 font-mono text-muted-foreground">{project.projectCode}</td>
+                            <td className="p-2.5 font-medium">{project.projectName}</td>
+                            <td className="p-2.5 text-right">{formatBaht(project.budgetRequested)}</td>
                           </tr>
                         ))}
                       </tbody>
                     </table>
                   </div>
 
-                  <div className="p-3.5 bg-blue-50 text-blue-900 border border-blue-200/50 rounded-xl space-y-1 dark:bg-blue-950/20 dark:text-blue-200 dark:border-blue-900/30">
-                    <h4 className="font-bold text-xs flex items-center gap-1">
-                      <FileText className="h-4 w-4 text-blue-600" />
-                      สิ่งที่จะเกิดขึ้นถัดไป:
+                  <div className="space-y-1 rounded-lg border border-blue-200/70 bg-blue-50 p-3.5 text-blue-900">
+                    <h4 className="flex items-center gap-1 text-xs font-bold text-blue-700">
+                      <FileText className="h-4 w-4" />
+                      สิ่งที่จะเกิดขึ้นถัดไป
                     </h4>
-                    <p className="text-[11px] leading-relaxed font-medium">
-                      สถานะของโครงการทั้งหมดจะเปลี่ยนจาก <strong className="text-gray-600 dark:text-gray-300">ร่าง (DRAFT)</strong> เป็น <strong className="text-blue-700 dark:text-blue-400">ส่งขออนุมัติ (SUBMITTED)</strong> และระบบจะส่งการแจ้งเตือนไปยังหัวหน้ากลุ่มงาน (Department Head) เพื่อพิจารณาตรวจสอบต่อไป
+                    <p className="text-[11px] font-medium leading-relaxed">
+                      สถานะของโครงการจะเปลี่ยนจาก “ร่าง” เป็น “ส่งขออนุมัติ” และเข้าสู่ขั้นตอนพิจารณาตาม workflow ปัจจุบัน
                     </p>
                   </div>
                 </>
               )}
 
-              {/* Modal Footer */}
               {!success && (
-                <div className="pt-4 border-t flex justify-end gap-2 mt-4">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={handleClose}
-                    disabled={loading}
-                    className="rounded-lg"
-                  >
+                <div className="mt-4 flex justify-end gap-2 border-t pt-4">
+                  <Button type="button" variant="outline" onClick={handleClose} disabled={loading} className="rounded-lg">
                     ยกเลิก
                   </Button>
                   <Button
                     type="button"
                     disabled={loading}
                     onClick={handleBulkSubmit}
-                    className="rounded-lg gap-1.5 bg-amber-600 hover:bg-amber-700 text-white min-w-[120px]"
+                    className="min-w-[120px] gap-1.5 rounded-lg bg-amber-600 text-white hover:bg-amber-700"
                   >
                     {loading ? (
                       <>

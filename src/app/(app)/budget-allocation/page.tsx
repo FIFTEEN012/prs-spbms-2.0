@@ -4,8 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { redirect } from "next/navigation";
 import { BudgetAllocationClient } from "./_components/budget-allocation-client";
 import { WalletBudgetClient } from "./_components/wallet-budget-client";
-import { calculateSourceNet } from "@/lib/budget-wallets";
-import { getBudgetPlanDashboard } from "@/lib/budget-plan-service";
+import { calculateSourceNet, calculateWalletBalance } from "@/lib/budget-wallets";
 
 export default async function BudgetAllocationPage() {
   const session = await getServerSession(authOptions);
@@ -15,24 +14,6 @@ export default async function BudgetAllocationPage() {
   if (!allowedRoles.includes(session.user.role)) {
     redirect("/dashboard");
   }
-
-  // Fetch all fund sources
-  const fundSources = await prisma.fundSource.findMany({
-    orderBy: { name: "asc" },
-    include: {
-      _count: {
-        select: { projects: true }
-      }
-    }
-  });
-
-  // Map to plain objects so Decimal is serialized as a number
-  const mappedSources = fundSources.map((fs) => ({
-    id: fs.id,
-    name: fs.name,
-    budgetAmount: Number(fs.budgetAmount),
-    projectCount: fs._count.projects,
-  }));
 
   try {
     const [academicYears, fiscalYears, latestPlan] = await Promise.all([
@@ -47,18 +28,34 @@ export default async function BudgetAllocationPage() {
         orderBy: { createdAt: "desc" },
       }),
     ]);
-    const dashboard = latestPlan ? await getBudgetPlanDashboard(latestPlan.id) : null;
-    const [transfers, operatingExpenses] = latestPlan ? await Promise.all([
+
+    const rejectLog = latestPlan && latestPlan.status === "REJECTED" ? await prisma.auditLog.findFirst({
+      where: {
+        entityName: "BudgetPlan",
+        entityId: latestPlan.id,
+        action: "BUDGET_PLAN_REJECT",
+      },
+      orderBy: { createdAt: "desc" },
+    }) : null;
+    const rejectComment = rejectLog && rejectLog.metadata && typeof rejectLog.metadata === "object" && "comment" in rejectLog.metadata ? (rejectLog.metadata as any).comment as string : null;
+
+    const [wallets, transfers, operatingExpenses] = latestPlan ? await Promise.all([
+      prisma.budgetWallet.findMany({
+        where: { budgetPlanId: latestPlan.id },
+        include: { ledgerEntries: true },
+        orderBy: { code: "asc" },
+      }),
       prisma.budgetTransferRequest.findMany({ where: { budgetPlanId: latestPlan.id }, include: { fromWallet: true, toWallet: true }, orderBy: { createdAt: "desc" } }),
       prisma.operatingExpense.findMany({ where: { budgetPlanId: latestPlan.id }, include: { wallet: true }, orderBy: { createdAt: "desc" } }),
-    ]) : [[], []];
-    const plan = latestPlan && dashboard ? {
+    ]) : [[], [], []];
+    const plan = latestPlan ? {
       id: latestPlan.id,
       name: latestPlan.name,
       status: latestPlan.status,
       academicYearName: latestPlan.academicYear.yearName,
       fiscalYearName: latestPlan.fiscalYear.yearName,
       formula: latestPlan.percentageSnapshot as never,
+      rejectComment,
       sourceAccounts: latestPlan.sourceAccounts.map((account) => ({
         id: account.id,
         code: account.fundSource.code ?? "",
@@ -66,12 +63,15 @@ export default async function BudgetAllocationPage() {
         net: calculateSourceNet(account.entries.map((entry) => ({ entryType: entry.entryType, amount: entry.amount }))),
         entries: account.entries.map((entry) => ({ id: entry.id, entryType: entry.entryType, amount: Number(entry.amount), description: entry.description, documentNo: entry.documentNo, entryDate: entry.entryDate.toISOString() })),
       })),
-      wallets: dashboard.wallets.map((wallet) => ({
+      wallets: wallets.map((wallet) => ({
         id: wallet.id,
         code: wallet.code,
         name: wallet.name,
         spendMode: wallet.spendMode,
-        balance: wallet.balance,
+        balance: calculateWalletBalance(wallet.ledgerEntries.map((entry) => ({
+          entryType: entry.entryType,
+          amount: entry.amount,
+        }))),
       })),
       transfers: transfers.map((transfer) => ({ id: transfer.id, fromWalletName: transfer.fromWallet.name, toWalletName: transfer.toWallet.name, amount: Number(transfer.amount), reason: transfer.reason, status: transfer.status })),
       operatingExpenses: operatingExpenses.map((expense) => ({ id: expense.id, walletName: expense.wallet.name, amount: Number(expense.amount), description: expense.description, status: expense.status })),
@@ -81,6 +81,24 @@ export default async function BudgetAllocationPage() {
   } catch (error) {
     console.warn("Wallet budget schema is not deployed; showing the legacy allocation screen.", error);
   }
+
+  const fundSources = await prisma.fundSource.findMany({
+    orderBy: { name: "asc" },
+    select: {
+      id: true,
+      name: true,
+      budgetAmount: true,
+      _count: {
+        select: { projects: true },
+      },
+    },
+  });
+  const mappedSources = fundSources.map((fs) => ({
+    id: fs.id,
+    name: fs.name,
+    budgetAmount: Number(fs.budgetAmount),
+    projectCount: fs._count.projects,
+  }));
 
   return (
     <div className="space-y-4">

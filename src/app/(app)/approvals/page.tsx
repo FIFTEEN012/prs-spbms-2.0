@@ -1,6 +1,6 @@
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
+import { getDepartmentsReference } from "@/lib/reference-data";
 import {
   getApprovalQueue,
   type ApprovalQueueQueryValues,
@@ -27,8 +27,16 @@ export default async function ApprovalsPage({
           page: 1,
           limit: 10,
           totalPages: 1,
+          summary: {
+            total: 0,
+            submitted: 0,
+            reviewed: 0,
+            pending: 0,
+            totalBudgetRequested: 0,
+          },
           filters: {
             q: "",
+            projectCode: "",
             status: "",
             departmentId: "",
             sortBy: "updatedAt" as const,
@@ -37,7 +45,7 @@ export default async function ApprovalsPage({
             limit: "10",
           },
         }),
-    prisma.department.findMany({ orderBy: { name: "asc" } }),
+    getDepartmentsReference(),
   ]);
 
   return (
@@ -48,6 +56,7 @@ export default async function ApprovalsPage({
       page={approvalQueue.page}
       limit={approvalQueue.limit}
       totalPages={approvalQueue.totalPages}
+      summary={approvalQueue.summary}
       initialQuery={approvalQueue.filters}
       departments={departments.map((department) => ({
         id: department.id,

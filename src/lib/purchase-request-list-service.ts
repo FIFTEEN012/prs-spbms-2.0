@@ -101,6 +101,8 @@ export type PurchaseRequestListRow = {
 
 type PurchaseRequestListActor = {
   role?: string | null;
+  userId?: string | null;
+  departmentId?: string | null;
 };
 
 type PurchaseRequestListFilters = Omit<
@@ -197,10 +199,22 @@ function getActivitySpendKey(projectId: string, activityId: string) {
   return `${projectId}:${activityId}`;
 }
 
-function buildPurchaseRequestWhere(
+export function buildPurchaseRequestWhere(
   filters: PurchaseRequestListFilters,
+  actor: PurchaseRequestListActor = {},
 ): Prisma.PurchaseRequestWhereInput {
   const clauses: Prisma.PurchaseRequestWhereInput[] = [];
+
+  // RBAC rules for visibility
+  if (actor.role === "TEACHER" && actor.userId) {
+    clauses.push({ createdById: actor.userId });
+  } else if (actor.role === "DEPT_HEAD" && actor.departmentId) {
+    clauses.push({
+      project: {
+        departmentId: actor.departmentId,
+      },
+    });
+  }
 
   if (filters.q) {
     clauses.push({
@@ -281,7 +295,7 @@ export async function getPurchaseRequestList(
   actor: PurchaseRequestListActor = {},
 ): Promise<PaginatedResult<PurchaseRequestListRow, PurchaseRequestListQueryValues>> {
   const filters = parsePurchaseRequestListFilters(source);
-  const where = buildPurchaseRequestWhere(filters);
+  const where = buildPurchaseRequestWhere(filters, actor);
   const total = await prisma.purchaseRequest.count({ where });
   const totalPages = Math.max(1, Math.ceil(total / filters.limit));
   const page = Math.min(filters.page, totalPages);

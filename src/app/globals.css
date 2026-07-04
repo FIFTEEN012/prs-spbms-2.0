@@ -1,4 +1,4 @@
-@import url("https://fonts.googleapis.com/css2?family=Sarabun:wght@400;500;600;700&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700&family=Noto+Sans+Thai:wght@400;500;600;700&family=Sarabun:wght@400;500;600;700&display=swap");
 
 @tailwind base;
 @tailwind components;
@@ -6,25 +6,31 @@
 
 @layer base {
   :root {
-    --background: 210 33% 98%;
-    --foreground: 222.2 47.4% 11.2%;
+    --background: 252 100% 99%;
+    --foreground: 222 42% 13%;
     --card: 0 0% 100%;
-    --card-foreground: 222.2 47.4% 11.2%;
-    --primary: 217 91% 33%;
+    --card-foreground: 222 42% 13%;
+    --primary: 219 91% 22%;
     --primary-foreground: 0 0% 100%;
-    --muted: 210 38% 95%;
-    --muted-foreground: 215 16% 38%;
-    --border: 214 28% 88%;
-    --input: 214 28% 88%;
-    --ring: 217 91% 33%;
-    --destructive: 0 84% 60%;
+    --muted: 230 100% 96%;
+    --muted-foreground: 225 10% 29%;
+    --border: 224 22% 78%;
+    --input: 224 22% 78%;
+    --ring: 219 78% 38%;
+    --destructive: 0 75% 42%;
     --destructive-foreground: 0 0% 100%;
-    --radius: 0.9rem;
+    --radius: 0.5rem;
+    --secondary: 45 100% 24%;
+    --secondary-container: 43 98% 57%;
+    --surface-container-low: 232 100% 97%;
+    --surface-container-high: 230 100% 94%;
+    --outline-variant: 228 92% 93%;
+    --outline: 230 7% 48%;
   }
 
   html, body {
-    font-family: "TH Sarabun New", "Sarabun", system-ui, sans-serif;
-    font-size: 17px;
+    font-family: "Hanken Grotesk", "Noto Sans Thai", "Sarabun", system-ui, sans-serif;
+    font-size: 16px;
     min-height: 100%;
     scroll-behavior: smooth;
   }
@@ -43,5 +49,19 @@
   select,
   textarea {
     font: inherit;
+  }
+
+  ::-webkit-scrollbar {
+    width: 0.375rem;
+    height: 0.375rem;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: hsl(var(--muted));
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: hsl(var(--border));
+    border-radius: 9999px;
   }
 }

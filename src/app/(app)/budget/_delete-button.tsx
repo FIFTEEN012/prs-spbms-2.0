@@ -2,14 +2,8 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { AlertTriangle, CheckCircle2, Loader2, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import {
-  Trash2,
-  Loader2,
-  X,
-  AlertTriangle,
-  CheckCircle2,
-} from "lucide-react";
 
 interface BudgetDeleteButtonProps {
   projectId: string;
@@ -34,25 +28,25 @@ export function BudgetDeleteButton({
     setSuccess(null);
 
     try {
-      const res = await fetch("/api/projects/bulk-delete", {
+      const response = await fetch("/api/projects/bulk-delete", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ projectIds: [projectId] }),
       });
 
-      const data = await res.json();
-      if (!res.ok) {
+      const data = await response.json();
+      if (!response.ok) {
         throw new Error(data.error || "เกิดข้อผิดพลาดในการลบโครงการ");
       }
 
-      setSuccess(`ลบโครงการสำเร็จเรียบร้อยแล้ว`);
+      setSuccess("ลบโครงการออกจากระบบเรียบร้อยแล้ว");
       router.refresh();
 
       setTimeout(() => {
         setIsOpen(false);
       }, 1200);
-    } catch (err: any) {
-      setError(err.message);
+    } catch (caughtError: any) {
+      setError(caughtError.message);
     } finally {
       setLoading(false);
     }
@@ -75,106 +69,112 @@ export function BudgetDeleteButton({
         }}
         variant="ghost"
         size="icon"
-        className="text-destructive hover:bg-destructive/10 hover:text-destructive h-8 w-8 rounded-lg"
+        className="h-9 w-9 rounded-lg text-destructive hover:bg-destructive/10 hover:text-destructive"
         title="ลบโครงการออกจากงบประมาณ"
       >
         <Trash2 className="h-4 w-4" />
       </Button>
 
-      {isOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 transition-all duration-200 text-left">
-          <div className="bg-background border rounded-xl shadow-2xl max-w-md w-full flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-150">
-            
-            {/* Modal Header */}
-            <div className="flex items-center justify-between px-6 py-4 border-b">
-              <h2 className="text-lg font-semibold flex items-center gap-2 text-destructive">
-                <Trash2 className="h-5 w-5" />
-                ยืนยันการลบโครงการอนุมัติ
-              </h2>
+      {isOpen ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-lg overflow-hidden rounded-xl border border-outline-variant bg-white shadow-2xl">
+            <div className="flex items-center justify-between border-b border-outline-variant bg-surface-container-low/70 px-6 py-5">
+              <div className="flex items-center gap-3">
+                <div className="flex h-11 w-11 items-center justify-center rounded-lg bg-destructive/10 text-destructive">
+                  <Trash2 className="h-5 w-5" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-black text-foreground">ยืนยันการลบโครงการ</h2>
+                  <p className="text-sm text-muted-foreground">การดำเนินการนี้ไม่สามารถย้อนกลับได้</p>
+                </div>
+              </div>
               <button
                 onClick={handleClose}
-                className="text-muted-foreground hover:text-foreground transition-colors"
+                className="rounded-lg p-2 text-muted-foreground transition hover:bg-muted hover:text-foreground"
                 disabled={loading}
               >
                 <X className="h-5 w-5" />
               </button>
             </div>
 
-            {/* Modal Body */}
-            <div className="p-6 space-y-4">
-              {error && (
-                <div className="p-3 bg-destructive/10 text-destructive rounded-lg flex items-start gap-2 text-xs font-medium border border-destructive/20">
-                  <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+            <div className="space-y-4 p-6">
+              {error ? (
+                <div className="flex items-start gap-3 rounded-2xl border border-destructive/20 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+                  <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
                   <span>{error}</span>
                 </div>
-              )}
+              ) : null}
 
-              {success && (
-                <div className="p-4 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-xl flex items-center gap-3 animate-in fade-in duration-300">
-                  <CheckCircle2 className="h-5 w-5 text-emerald-600 shrink-0" />
-                  <span className="text-sm font-semibold">{success}</span>
+              {success ? (
+                <div className="flex items-start gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+                  <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
+                  <span>{success}</span>
                 </div>
-              )}
+              ) : null}
 
-              {!success && (
+              {!success ? (
                 <>
-                  <p className="text-sm text-foreground leading-relaxed">
-                    คุณแน่ใจหรือไม่ว่าต้องการลบโครงการอนุมัติงบประมาณนี้?
-                  </p>
-                  
-                  <div className="p-3 bg-muted/40 rounded-lg text-xs space-y-1 font-medium text-foreground/80 border">
-                    <div><strong>รหัสโครงการ:</strong> {projectCode}</div>
-                    <div><strong>ชื่อโครงการ:</strong> {projectName}</div>
+                  <div className="rounded-xl border border-outline-variant bg-surface-container-low/70 p-4">
+                    <dl className="space-y-2 text-sm">
+                      <div className="flex items-start justify-between gap-3">
+                        <dt className="text-muted-foreground">รหัสโครงการ</dt>
+                        <dd className="font-bold text-foreground">{projectCode}</dd>
+                      </div>
+                      <div className="flex items-start justify-between gap-3">
+                        <dt className="text-muted-foreground">ชื่อโครงการ</dt>
+                        <dd className="text-right font-bold text-foreground">{projectName}</dd>
+                      </div>
+                    </dl>
                   </div>
 
-                  <div className="p-3.5 bg-red-50 text-red-900 border border-red-200/50 rounded-xl space-y-1 dark:bg-red-950/20 dark:text-red-200 dark:border-red-900/30">
-                    <h4 className="font-bold text-xs flex items-center gap-1 text-red-700">
-                      <AlertTriangle className="h-4 w-4" />
-                      คำเตือนสำคัญ:
-                    </h4>
-                    <p className="text-[11px] leading-relaxed font-medium">
-                      การดำเนินการนี้จะทำการลบข้อมูลทั้งหมดที่เชื่อมโยง เช่น กิจกรรม ประวัติการอนุมัติ รายการทำธุรกรรมงบ และประวัติการจัดซื้อจัดจ้างออกจากระบบแบบถาวรโดยไม่สามารถกู้คืนได้
-                    </p>
+                  <div className="rounded-xl border border-amber-200 bg-amber-50/80 p-4">
+                    <div className="flex items-start gap-3">
+                      <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-700" />
+                      <div className="space-y-1.5 text-sm">
+                        <p className="font-bold text-amber-800">ผลกระทบของการลบ</p>
+                        <p className="leading-relaxed text-amber-900/90">
+                          ระบบจะลบข้อมูลที่เชื่อมโยงกับโครงการนี้ออกจากระบบ เช่น กิจกรรม ประวัติอนุมัติ
+                          ธุรกรรมงบประมาณ และข้อมูลจัดซื้อจัดจ้างที่เกี่ยวข้อง
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex justify-end gap-2 border-t border-border/60 pt-4">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={handleClose}
+                      disabled={loading}
+                      className="rounded-lg"
+                    >
+                      ยกเลิก
+                    </Button>
+                    <Button
+                      type="button"
+                      disabled={loading}
+                      onClick={handleDelete}
+                      className="min-w-[132px] rounded-lg bg-destructive text-white hover:bg-destructive/90"
+                    >
+                      {loading ? (
+                        <>
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                          กำลังลบ...
+                        </>
+                      ) : (
+                        <>
+                          <Trash2 className="h-4 w-4" />
+                          ยืนยันลบ
+                        </>
+                      )}
+                    </Button>
                   </div>
                 </>
-              )}
-
-              {/* Modal Footer */}
-              {!success && (
-                <div className="pt-4 border-t flex justify-end gap-2 mt-4">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={handleClose}
-                    disabled={loading}
-                    className="rounded-lg"
-                  >
-                    ยกเลิก
-                  </Button>
-                  <Button
-                    type="button"
-                    disabled={loading}
-                    onClick={handleDelete}
-                    className="rounded-lg gap-1.5 bg-destructive hover:bg-destructive/90 text-white min-w-[120px]"
-                  >
-                    {loading ? (
-                      <>
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                        กำลังลบ...
-                      </>
-                    ) : (
-                      <>
-                        <Trash2 className="h-4 w-4" />
-                        ยืนยันลบ
-                      </>
-                    )}
-                  </Button>
-                </div>
-              )}
+              ) : null}
             </div>
           </div>
         </div>
-      )}
+      ) : null}
     </>
   );
 }

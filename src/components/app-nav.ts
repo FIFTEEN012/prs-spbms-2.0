@@ -20,7 +20,14 @@ export const APP_NAV = [
   { href: "/users", label: "ผู้ใช้งาน", icon: Users },
 ] as const;
 
+export function isNavItemActive(pathname: string, href: string) {
+  return pathname === href || pathname.startsWith(`${href}/`);
+}
+
 export function getPageTitle(pathname: string) {
-  const matched = APP_NAV.find((item) => pathname.startsWith(item.href));
+  const matched = [...APP_NAV]
+    .sort((left, right) => right.href.length - left.href.length)
+    .find((item) => isNavItemActive(pathname, item.href));
+
   return matched?.label ?? "PRS SPBMS";
 }

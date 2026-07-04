@@ -12,7 +12,8 @@ const config: Config = {
     },
     extend: {
       fontFamily: {
-        sans: ['"TH Sarabun New"', '"Sarabun"', "system-ui", "sans-serif"],
+        sans: ['"Hanken Grotesk"', '"Noto Sans Thai"', '"Sarabun"', "system-ui", "sans-serif"],
+        mono: ['"JetBrains Mono"', "ui-monospace", "SFMono-Regular", "monospace"],
       },
       colors: {
         background: "hsl(var(--background))",
@@ -21,6 +22,14 @@ const config: Config = {
           DEFAULT: "hsl(var(--primary))",
           foreground: "hsl(var(--primary-foreground))",
         },
+        secondary: {
+          DEFAULT: "hsl(var(--secondary))",
+          container: "hsl(var(--secondary-container))",
+        },
+        "surface-container-low": "hsl(var(--surface-container-low))",
+        "surface-container-high": "hsl(var(--surface-container-high))",
+        "outline-variant": "hsl(var(--outline-variant))",
+        outline: "hsl(var(--outline))",
         muted: {
           DEFAULT: "hsl(var(--muted))",
           foreground: "hsl(var(--muted-foreground))",
