@@ -11,7 +11,9 @@ import Link from "next/link";
 import {
   CheckCircle2, Clock, XCircle, ChevronRight, AlertTriangle,
   Printer, ArrowLeft, FileText, Loader2, Package,
-  Building2, CheckCheck, AlertCircle
+  Building2, CheckCheck, AlertCircle, Pencil, Trash2,
+  Route, WalletCards, UserRound, CalendarDays, FolderOpen,
+  ClipboardCheck, BarChart3, ShieldCheck
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -37,6 +39,7 @@ interface PurchaseRequest {
   };
   activity?: { name: string } | null;
   fundSource?: { name: string } | null;
+  budgetWallet?: { id: string; name: string; code: string } | null;
   documentNo: string | null;
   documentDate: any;
   subject: string;
@@ -189,6 +192,9 @@ export function PurchaseRequestDetailClient({
   const usagePercent = previousBalance > 0 ? (requestedAmount / previousBalance) * 100 : 0;
   const isOverBudget = remainingBalance < 0;
   const isLowBudget = !isOverBudget && usagePercent > 80;
+  const spentPercent = allocatedBudget > 0 ? Math.min(100, Math.max(0, (spentBefore / allocatedBudget) * 100)) : 0;
+  const requestPercent = allocatedBudget > 0 ? Math.min(100 - spentPercent, Math.max(0, (requestedAmount / allocatedBudget) * 100)) : 0;
+  const projectedPercent = Math.min(100, spentPercent + requestPercent);
 
   // Handlers
   const handleApprove = async (isApproved: boolean, reasonOverride?: string) => {
@@ -253,6 +259,31 @@ export function PurchaseRequestDetailClient({
     : JSON.parse((request.committee as string) || "[]");
 
   const statusColor = STATUS_COLORS[request.status] || STATUS_COLORS["PENDING"];
+  const currentStatusIndex = STATUS_ORDER.indexOf(request.status);
+  const latestApprovalStepIndex = [
+    request.planApprovedAt ? 0 : -1,
+    request.financeApprovedAt ? 1 : -1,
+    request.procurementApprovedAt ? 2 : -1,
+    request.budgetApprovedAt ? 3 : -1,
+    request.directorApprovedAt ? 4 : -1,
+  ].reduce((max, index) => Math.max(max, index), -1);
+  const approverName = currentStep === "plan"
+    ? "งานแผนงาน"
+    : currentStep === "finance"
+      ? "งานการเงิน"
+      : currentStep === "procurement"
+        ? "งานพัสดุ"
+        : currentStep === "budget"
+          ? "หัวหน้างบประมาณ"
+          : currentStep === "director"
+            ? "ผู้บริหาร"
+            : "เสร็จสิ้น";
+  const budgetHealthLabel = isOverBudget ? "งบไม่เพียงพอ" : isLowBudget ? "ควรตรวจสอบงบ" : "งบเพียงพอ";
+  const budgetHealthClass = isOverBudget
+    ? "border-red-200 bg-red-50 text-red-700"
+    : isLowBudget
+      ? "border-amber-200 bg-amber-50 text-amber-700"
+      : "border-emerald-200 bg-emerald-50 text-emerald-700";
 
   // Next action mapping
   const getNextActionInfo = () => {
@@ -282,16 +313,6 @@ export function PurchaseRequestDetailClient({
     orange: "border-orange-200 bg-orange-50",
   };
 
-  const nextActionIconColorMap: Record<string, string> = {
-    green: "text-green-600",
-    red: "text-red-600",
-    amber: "text-amber-600",
-    blue: "text-blue-600",
-    purple: "text-purple-600",
-    indigo: "text-indigo-600",
-    orange: "text-orange-600",
-  };
-
   const TABS: { key: TabKey; label: string }[] = [
     { key: "detail", label: "รายละเอียดคำขอ" },
     { key: "items", label: "รายการพัสดุ" },
@@ -300,7 +321,7 @@ export function PurchaseRequestDetailClient({
   ];
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-6">
       {/* Approve/Reject Modals */}
       {showApproveModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
@@ -412,152 +433,150 @@ export function PurchaseRequestDetailClient({
       {message && <StatusAlert variant="success">{message}</StatusAlert>}
 
       {/* ===== HEADER ===== */}
-      <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 pb-4 border-b">
-        <div>
-          {/* Breadcrumb */}
-          <nav className="flex items-center gap-1.5 text-xs text-gray-500 mb-2">
-            <Link href="/" className="hover:text-purple-600">หน้าแรก</Link>
-            <ChevronRight className="w-3 h-3" />
-            <Link href="/procurement" className="hover:text-purple-600">พัสดุ/จัดซื้อ</Link>
-            <ChevronRight className="w-3 h-3" />
-            <span className="text-gray-700">รายละเอียดคำขอจัดซื้อ</span>
-          </nav>
-          <div className="flex flex-wrap items-center gap-2">
-            <h1 className="text-xl font-bold text-gray-900">
-              {request.documentNo ? `เลขที่ ${request.documentNo}` : "คำขอจัดซื้อ"}
-            </h1>
-            <span className={cn("px-2.5 py-0.5 rounded-full text-xs font-semibold", statusColor.badge)}>
-              {STATUS_LABELS[request.status] || request.status}
-            </span>
-          </div>
-          <p className="text-sm text-gray-600 mt-1">{request.subject}</p>
+      <section className="overflow-hidden rounded-xl border border-primary/10 bg-white/90 p-5 shadow-sm backdrop-blur md:p-6">
+        <div className="mb-4 flex items-center gap-1.5 text-xs font-semibold text-slate-500">
+          <Link href="/" className="hover:text-primary">หน้าแรก</Link>
+          <ChevronRight className="size-3" />
+          <Link href="/procurement" className="hover:text-primary">พัสดุ/จัดซื้อ</Link>
+          <ChevronRight className="size-3" />
+          <span className="text-primary">รายละเอียดคำขอจัดซื้อ</span>
         </div>
-        <div className="flex flex-wrap gap-2 shrink-0">
-          <Button variant="outline" size="sm" asChild>
-            <Link href="/procurement"><ArrowLeft className="w-4 h-4 mr-1" /> กลับ</Link>
-          </Button>
-          {isSuperAdmin && (
-            <>
-              <Button variant="outline" size="sm" asChild className="border-amber-400 text-amber-700 hover:bg-amber-50">
-                <Link href={`/procurement/${request.id}/edit`}>✏️ แก้ไข</Link>
-              </Button>
-              <Button variant="destructive" size="sm" onClick={() => setIsDeleteOpen(true)}>
-                🗑️ ลบ
-              </Button>
-            </>
-          )}
-          <Button size="sm" asChild className="bg-emerald-600 hover:bg-emerald-700 text-white">
-            <Link href={`/procurement/${request.id}/print`} target="_blank">
-              <Printer className="w-4 h-4 mr-1" /> พิมพ์เอกสาร
-            </Link>
-          </Button>
-        </div>
-      </div>
-
-      {/* ===== NEXT ACTION CARD ===== */}
-      {nextAction && (
-        <div className={cn("rounded-xl border p-4", nextActionColorMap[nextAction.color || "amber"])}>
-          <div className="flex items-start gap-3">
-            <nextAction.icon className={cn("w-6 h-6 mt-0.5 shrink-0", nextActionIconColorMap[nextAction.color || "amber"])} />
-            <div className="flex-1">
-              <p className="font-semibold text-gray-900">{nextAction.title}</p>
-              <p className="text-sm text-gray-600 mt-0.5">{nextAction.desc}</p>
+        <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+          <div className="min-w-0 space-y-3">
+            <div className="flex flex-wrap items-center gap-3">
+              <span className="rounded-full bg-slate-100 px-3 py-1 font-mono text-xs font-bold text-slate-600">
+                {request.documentNo || "ยังไม่มีเลขที่เอกสาร"}
+              </span>
+              <span className={cn("inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-bold", statusColor.badge)}>
+                <span className={cn("size-1.5 rounded-full", statusColor.dot)} />
+                {STATUS_LABELS[request.status] || request.status}
+              </span>
             </div>
-            {canActuallySign && nextAction.btnApprove && !isReadOnly && (
-              <div className="flex gap-2 shrink-0">
-                <Button size="sm" variant="outline" className="border-red-300 text-red-700 hover:bg-red-50"
-                  onClick={() => { setShowRejectModal(true); setError(null); }}>
-                  ตีกลับ
-                </Button>
-                <Button size="sm" className="bg-purple-600 hover:bg-purple-700 text-white"
-                  onClick={() => { setShowApproveModal(true); setError(null); }}>
-                  {nextAction.btnApprove}
-                </Button>
+            <div>
+              <h1 className="text-2xl font-extrabold tracking-tight text-primary md:text-3xl">
+                {request.subject}
+              </h1>
+              <div className="mt-4 grid gap-2 text-sm text-slate-600 sm:grid-cols-2 xl:grid-cols-4">
+                <span className="inline-flex min-w-0 items-center gap-2">
+                  <FolderOpen className="size-4 shrink-0 text-primary" />
+                  <span className="truncate">{request.project.projectName}</span>
+                </span>
+                <span className="inline-flex min-w-0 items-center gap-2">
+                  <UserRound className="size-4 shrink-0 text-primary" />
+                  <span className="truncate">{request.createdBy?.fullName || "ยังไม่ได้ระบุผู้สร้าง"}</span>
+                </span>
+                <span className="inline-flex min-w-0 items-center gap-2">
+                  <CalendarDays className="size-4 shrink-0 text-primary" />
+                  <span className="truncate">{formatThaiDate(request.documentDate)}</span>
+                </span>
+                <span className="inline-flex min-w-0 items-center gap-2">
+                  <Building2 className="size-4 shrink-0 text-primary" />
+                  <span className="truncate">{request.project.department?.name || "ยังไม่ได้ระบุกลุ่มบริหาร"}</span>
+                </span>
               </div>
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-2 lg:justify-end">
+            <Button variant="outline" size="sm" asChild className="rounded-lg">
+              <Link href="/procurement"><ArrowLeft className="mr-1.5 size-4" /> กลับ</Link>
+            </Button>
+            {isSuperAdmin && (
+              <>
+                <Button variant="outline" size="sm" asChild className="rounded-lg border-amber-300 text-amber-700 hover:bg-amber-50">
+                  <Link href={`/procurement/${request.id}/edit`}><Pencil className="mr-1.5 size-4" /> แก้ไข</Link>
+                </Button>
+                <Button variant="destructive" size="sm" className="rounded-lg" onClick={() => setIsDeleteOpen(true)}>
+                  <Trash2 className="mr-1.5 size-4" /> ลบ
+                </Button>
+              </>
             )}
-            {!canActuallySign && !isTerminalStatus && !isReadOnly && (
-              <span className="text-xs text-gray-500 shrink-0 text-right max-w-[120px]">บัญชีนี้ดูข้อมูลได้เท่านั้น</span>
-            )}
+            <Button size="sm" asChild className="rounded-lg bg-primary text-white shadow-sm hover:bg-primary/90">
+              <Link href={`/procurement/${request.id}/print`} target="_blank">
+                <Printer className="mr-1.5 size-4" /> พิมพ์เอกสาร
+              </Link>
+            </Button>
           </div>
         </div>
-      )}
+      </section>
 
-      {/* ===== SUMMARY CARDS ===== */}
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
-        {[
-          { label: "ยอดขอรวม", value: formatBaht(requestedAmount), color: "bg-purple-50 border-purple-200 text-purple-700" },
-          { label: "งบอนุมัติโครงการ", value: formatBaht(allocatedBudget), color: "bg-blue-50 border-blue-200 text-blue-700" },
-          { label: "ใช้จ่ายก่อนหน้า", value: formatBaht(spentBefore), color: "bg-amber-50 border-amber-200 text-amber-700" },
-          { label: "งบคงเหลือก่อนขอ", value: formatBaht(previousBalance), color: "bg-teal-50 border-teal-200 text-teal-700" },
-          { label: "งบคงเหลือหลังขอ", value: formatBaht(remainingBalance), color: isOverBudget ? "bg-red-50 border-red-200 text-red-700" : isLowBudget ? "bg-amber-50 border-amber-200 text-amber-700" : "bg-green-50 border-green-200 text-green-700" },
-        ].map((card) => (
-          <div key={card.label} className={cn("rounded-xl border p-3 text-center", card.color)}>
-            <p className="text-xs text-gray-500 mb-1">{card.label}</p>
-            <p className="text-sm font-bold">{card.value}</p>
-          </div>
-        ))}
-      </div>
-
-      {/* ===== WORKFLOW STEPPER ===== */}
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-sm text-gray-700">เส้นทางการตรวจสอบคำขอจัดซื้อ</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="flex items-center gap-0 overflow-x-auto pb-2">
-            {WORKFLOW_STEPS.map((ws, idx) => {
-              const currentIdx = STATUS_ORDER.indexOf(request.status);
-              const wsIdx = STATUS_ORDER.indexOf(ws.status);
-              const isRejected = request.status === "REJECTED";
-              
-              let state: "done" | "current" | "pending" | "rejected" = "pending";
-              if (isRejected && wsIdx <= currentIdx) state = "rejected";
-              else if (wsIdx < currentIdx) state = "done";
-              else if (ws.status === request.status || (request.status === "APPROVED" && ws.status === "APPROVED")) state = "current";
-              
-              return (
-                <div key={ws.status} className="flex items-center">
-                  <div className="flex flex-col items-center min-w-[80px]">
-                    <div className={cn(
-                      "w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold border-2 transition-all",
-                      state === "done" && "bg-green-500 border-green-500 text-white",
-                      state === "current" && request.status === "APPROVED" && "bg-green-600 border-green-600 text-white",
-                      state === "current" && request.status !== "APPROVED" && "bg-purple-600 border-purple-600 text-white",
-                      state === "pending" && "bg-white border-gray-300 text-gray-400",
-                      state === "rejected" && "bg-red-400 border-red-400 text-white",
-                    )}>
-                      {state === "done" || (state === "current" && request.status === "APPROVED") ? <CheckCircle2 className="w-4 h-4" /> :
-                       state === "rejected" ? <XCircle className="w-4 h-4" /> :
-                       idx + 1}
-                    </div>
-                    <span className={cn(
-                      "text-xs mt-1.5 text-center leading-tight",
-                      state === "done" && "text-green-600 font-medium",
-                      state === "current" && request.status !== "APPROVED" && "text-purple-600 font-bold",
-                      state === "current" && request.status === "APPROVED" && "text-green-600 font-bold",
-                      state === "pending" && "text-gray-400",
-                      state === "rejected" && "text-red-500 font-medium",
-                    )}>
-                      {ws.label}
-                    </span>
-                  </div>
-                  {idx < WORKFLOW_STEPS.length - 1 && (
-                    <div className={cn(
-                      "w-6 h-0.5 mb-4",
-                      wsIdx < currentIdx && request.status !== "REJECTED" ? "bg-green-400" :
-                      "bg-gray-200"
-                    )} />
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* ===== MAIN LAYOUT: Tabs + Right Panel ===== */}
-      <div className="flex flex-col lg:flex-row gap-5">
+      {/* ===== MAIN LAYOUT: Content + Right Approval Center ===== */}
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
         <div className="flex-1 min-w-0 space-y-4">
+          {/* ===== NEXT ACTION CARD ===== */}
+          {nextAction && (
+            <section className={cn("rounded-xl border p-5 shadow-sm", nextActionColorMap[nextAction.color || "amber"])}>
+              <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+                <div className="flex min-w-0 gap-4">
+                  <div className="flex size-12 shrink-0 items-center justify-center rounded-xl bg-primary text-white shadow-sm">
+                    <ClipboardCheck className="size-6" />
+                  </div>
+                  <div>
+                    <p className="text-xs font-bold uppercase tracking-wide text-primary">งานถัดไป: {approverName}</p>
+                    <h2 className="mt-1 text-lg font-extrabold text-slate-950">{nextAction.title}</h2>
+                    <p className="mt-1 max-w-2xl text-sm leading-relaxed text-slate-600">{nextAction.desc}</p>
+                  </div>
+                </div>
+                {canActuallySign && nextAction.btnApprove && !isReadOnly ? (
+                  <div className="flex shrink-0 gap-2">
+                    <Button size="sm" variant="outline" className="rounded-lg border-red-300 text-red-700 hover:bg-red-50"
+                      onClick={() => { setShowRejectModal(true); setError(null); }}>
+                      <XCircle className="mr-1.5 size-4" /> ตีกลับ
+                    </Button>
+                    <Button size="sm" className="rounded-lg bg-primary text-white hover:bg-primary/90"
+                      onClick={() => { setShowApproveModal(true); setError(null); }}>
+                      <CheckCheck className="mr-1.5 size-4" /> {nextAction.btnApprove}
+                    </Button>
+                  </div>
+                ) : !isTerminalStatus && !isReadOnly ? (
+                  <span className="rounded-full bg-white/70 px-3 py-1 text-xs font-semibold text-slate-500">
+                    บัญชีนี้ดูข้อมูลได้เท่านั้น
+                  </span>
+                ) : null}
+              </div>
+            </section>
+          )}
+
+          {/* ===== SUMMARY CARDS ===== */}
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
+            {[
+              { label: "ยอดขอรวม", value: formatBaht(requestedAmount), color: "bg-[#e2dfff] border-[#3525cd]/10 text-[#1e00a9]" },
+              { label: "งบอนุมัติโครงการ", value: formatBaht(allocatedBudget), color: "bg-[#dae2ff] border-primary/10 text-primary" },
+              { label: "ใช้จ่ายก่อนหน้า", value: formatBaht(spentBefore), color: "bg-[#ffdf9a] border-[#785a00]/10 text-[#785a00]" },
+              { label: "งบคงเหลือก่อนขอ", value: formatBaht(previousBalance), color: "bg-white border-slate-200 text-slate-800" },
+              { label: "งบคงเหลือหลังขอ", value: formatBaht(remainingBalance), color: isOverBudget ? "bg-red-50 border-red-200 text-red-700" : isLowBudget ? "bg-amber-50 border-amber-200 text-amber-700" : "bg-emerald-50 border-emerald-200 text-emerald-700" },
+            ].map((card) => (
+              <div key={card.label} className={cn("rounded-xl border p-4 shadow-sm", card.color, card.label === "งบคงเหลือหลังขอ" && "md:col-span-2")}>
+                <p className="text-xs font-semibold text-current/70">{card.label}</p>
+                <p className="mt-1 text-lg font-extrabold tracking-tight">{card.value}</p>
+              </div>
+            ))}
+          </div>
+
+          {/* ===== BUDGET SNAPSHOT ===== */}
+          <Card className="rounded-xl border-slate-200 bg-white/90 shadow-sm">
+            <CardHeader className="flex flex-row items-center justify-between pb-3">
+              <CardTitle className="flex items-center gap-2 text-sm font-bold text-slate-800">
+                <BarChart3 className="size-4 text-primary" />
+                ภาพรวมงบประมาณโครงการ
+              </CardTitle>
+              <span className={cn("rounded-full border px-3 py-1 text-xs font-bold", budgetHealthClass)}>
+                {budgetHealthLabel}
+              </span>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="flex h-6 overflow-hidden rounded-full bg-slate-100">
+                <div className="bg-slate-300" style={{ width: `${spentPercent}%` }} />
+                <div className={cn("flex items-center justify-center text-[10px] font-bold text-white", isOverBudget ? "bg-red-500" : isLowBudget ? "bg-amber-500" : "bg-primary")} style={{ width: `${requestPercent}%` }}>
+                  {requestPercent > 12 ? "ยอดขอครั้งนี้" : ""}
+                </div>
+              </div>
+              <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500">
+                <span>ใช้ไปแล้ว {spentPercent.toFixed(1)}%</span>
+                <span className="font-bold text-primary">หลังคำขอนี้ {projectedPercent.toFixed(1)}%</span>
+                <span>เต็มวงเงิน 100%</span>
+              </div>
+            </CardContent>
+          </Card>
           {/* Tabs Header */}
           <div className="flex gap-1 border-b overflow-x-auto">
             {TABS.map((tab) => (
@@ -830,69 +849,170 @@ export function PurchaseRequestDetailClient({
         </div>
 
         {/* ===== RIGHT SIDE PANEL ===== */}
-        <div className="w-full lg:w-64 shrink-0 space-y-4">
+        <aside className="w-full space-y-4">
           <div className="sticky top-6 space-y-4">
-            <Card>
+            <Card className="rounded-xl border-primary/10 bg-white/90 shadow-sm">
+              <CardHeader className="pb-4">
+                <CardTitle className="flex items-center gap-2 text-lg font-extrabold text-primary">
+                  <Route className="size-5" />
+                  เส้นทางการตรวจสอบ
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="relative space-y-6 before:absolute before:left-[11px] before:top-7 before:h-[calc(100%-3rem)] before:w-0.5 before:bg-slate-200">
+                  <div className="relative z-10 flex gap-4">
+                    <div className="flex size-6 shrink-0 items-center justify-center rounded-full bg-emerald-500 text-white">
+                      <CheckCircle2 className="size-4" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-bold text-emerald-700">สร้างคำขอ</p>
+                      <p className="text-xs text-slate-500">{request.createdAt ? formatThaiDate(request.createdAt) : formatThaiDate(request.documentDate)}</p>
+                      <p className="mt-0.5 text-xs font-semibold text-slate-600">โดย {request.createdBy?.fullName || "ไม่ระบุ"}</p>
+                    </div>
+                  </div>
+                  {WORKFLOW_STEPS.slice(0, -1).map((step) => {
+                    const stepIndex = STATUS_ORDER.indexOf(step.status);
+                    const approvedAt = step.step === "plan"
+                      ? request.planApprovedAt
+                      : step.step === "finance"
+                        ? request.financeApprovedAt
+                        : step.step === "procurement"
+                          ? request.procurementApprovedAt
+                          : step.step === "budget"
+                            ? request.budgetApprovedAt
+                            : step.step === "director"
+                              ? request.directorApprovedAt
+                              : null;
+                    const approvedById = step.step === "plan"
+                      ? request.planApprovedById
+                      : step.step === "finance"
+                        ? request.financeApprovedById
+                        : step.step === "procurement"
+                          ? request.procurementApprovedById
+                          : step.step === "budget"
+                            ? request.budgetApprovedById
+                            : step.step === "director"
+                              ? request.directorApprovedById
+                              : null;
+                    const isCurrent = request.status === step.status;
+                    const isRejectedHere = request.status === "REJECTED" && latestApprovalStepIndex === stepIndex;
+                    const isDone = !isRejectedHere && (Boolean(approvedAt) || (currentStatusIndex > stepIndex && request.status !== "REJECTED"));
+
+                    return (
+                      <div key={step.status} className="relative z-10 flex gap-4">
+                        <div className={cn(
+                          "flex size-6 shrink-0 items-center justify-center rounded-full border-2",
+                          isDone && "border-emerald-500 bg-emerald-500 text-white",
+                          isCurrent && !isDone && "border-primary bg-primary text-white ring-4 ring-blue-100",
+                          !isCurrent && !isDone && !isRejectedHere && "border-slate-300 bg-white",
+                          isRejectedHere && "border-red-400 bg-red-400 text-white",
+                        )}>
+                          {isDone ? <CheckCircle2 className="size-4" /> : isRejectedHere ? <XCircle className="size-4" /> : isCurrent ? <span className="size-2 rounded-full bg-white" /> : null}
+                        </div>
+                        <div className="min-w-0">
+                          <p className={cn(
+                            "text-sm font-bold",
+                            isDone && "text-emerald-700",
+                            isCurrent && !isDone && "text-primary",
+                            !isDone && !isCurrent && "text-slate-500",
+                            isRejectedHere && "text-red-700",
+                          )}>
+                            {step.label}
+                          </p>
+                          <p className="text-xs text-slate-500">
+                            {approvedAt
+                              ? formatThaiDate(approvedAt)
+                              : isCurrent
+                                ? "กำลังดำเนินการ"
+                                : request.status === "REJECTED"
+                                  ? "หยุดการดำเนินการ"
+                                  : "รอดำเนินการ"}
+                          </p>
+                          {approvedById && (
+                            <p className="mt-0.5 text-xs font-semibold text-slate-600">
+                              โดย {approverMap[approvedById] || "ไม่ระบุ"}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="rounded-xl border-slate-200 bg-white/90 shadow-sm">
               <CardHeader className="pb-3">
-                <CardTitle className="text-sm text-gray-700">ข้อมูลสำคัญ</CardTitle>
+                <CardTitle className="flex items-center gap-2 text-sm font-bold text-slate-700">
+                  <ShieldCheck className="size-4 text-primary" />
+                  ข้อมูลสำคัญ
+                </CardTitle>
               </CardHeader>
               <CardContent className="space-y-3 text-sm">
                 <div>
-                  <p className="text-xs text-gray-400">สถานะปัจจุบัน</p>
-                  <span className={cn("inline-block mt-0.5 px-2 py-0.5 rounded-full text-xs font-semibold", statusColor.badge)}>
+                  <p className="text-xs text-slate-400">สถานะปัจจุบัน</p>
+                  <span className={cn("mt-1 inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-bold", statusColor.badge)}>
+                    <span className={cn("size-1.5 rounded-full", statusColor.dot)} />
                     {STATUS_LABELS[request.status]}
                   </span>
                 </div>
                 <div>
-                  <p className="text-xs text-gray-400">ผู้สร้างคำขอ</p>
-                  <p className="font-medium text-gray-900">{request.createdBy?.fullName || "-"}</p>
+                  <p className="text-xs text-slate-400">ยอดขอรวม</p>
+                  <p className="font-extrabold text-primary">{formatBaht(requestedAmount)}</p>
                 </div>
                 <div>
-                  <p className="text-xs text-gray-400">โครงการ</p>
-                  <p className="font-medium text-gray-900 text-xs leading-snug">{request.project.projectName}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-gray-400">ยอดขอรวม</p>
-                  <p className="font-bold text-purple-700">{formatBaht(requestedAmount)}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-gray-400">งบคงเหลือหลังขอ</p>
-                  <p className={cn("font-bold", isOverBudget ? "text-red-600" : "text-green-600")}>
+                  <p className="text-xs text-slate-400">งบคงเหลือหลังขอ</p>
+                  <p className={cn("font-extrabold", isOverBudget ? "text-red-600" : "text-emerald-600")}>
                     {formatBaht(remainingBalance)}
                   </p>
                 </div>
-                {request.createdAt && (
-                  <div>
-                    <p className="text-xs text-gray-400">วันที่สร้าง</p>
-                    <p className="text-gray-700 text-xs">{formatThaiDate(request.createdAt)}</p>
-                  </div>
-                )}
+                <div>
+                  <p className="text-xs text-slate-400">กระเป๋างบประมาณ</p>
+                  <p className="font-semibold text-slate-800">{request.budgetWallet?.name || "ไม่ได้ระบุกระเป๋างบ"}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-slate-400">โครงการ</p>
+                  <p className="text-xs font-semibold leading-snug text-slate-800">{request.project.projectName}</p>
+                </div>
               </CardContent>
-              <CardFooter className="flex flex-col gap-2 border-t pt-3">
-                <Button variant="outline" size="sm" className="w-full text-xs" asChild>
-                  <Link href={`/projects/${request.project.id}`}><Building2 className="w-3 h-3 mr-1" /> ดูโครงการ</Link>
+              <CardFooter className="flex flex-col gap-2 border-t bg-slate-50/70 pt-3">
+                <Button variant="outline" size="sm" className="w-full rounded-lg bg-white text-xs" asChild>
+                  <Link href={`/projects/${request.project.id}`}><Building2 className="mr-1.5 size-3.5" /> ดูโครงการ</Link>
                 </Button>
-                <Button variant="outline" size="sm" className="w-full text-xs" asChild>
+                <Button variant="outline" size="sm" className="w-full rounded-lg bg-white text-xs" asChild>
                   <Link href={`/procurement/${request.id}/print`} target="_blank">
-                    <Printer className="w-3 h-3 mr-1" /> พิมพ์เอกสาร
+                    <Printer className="mr-1.5 size-3.5" /> พิมพ์เอกสาร
                   </Link>
                 </Button>
                 {canActuallySign && !isReadOnly && (
                   <>
-                    <Button size="sm" className="w-full bg-purple-600 hover:bg-purple-700 text-white text-xs"
+                    <Button size="sm" className="w-full rounded-lg bg-primary text-xs text-white hover:bg-primary/90"
                       onClick={() => { setShowApproveModal(true); setError(null); }}>
-                      <CheckCheck className="w-3 h-3 mr-1" /> {nextAction?.btnApprove || "ตรวจสอบผ่าน"}
+                      <CheckCheck className="mr-1.5 size-3.5" /> {nextAction?.btnApprove || "ตรวจสอบผ่าน"}
                     </Button>
-                    <Button size="sm" variant="outline" className="w-full border-red-300 text-red-700 hover:bg-red-50 text-xs"
+                    <Button size="sm" variant="outline" className="w-full rounded-lg border-red-300 bg-white text-xs text-red-700 hover:bg-red-50"
                       onClick={() => { setShowRejectModal(true); setError(null); }}>
-                      <XCircle className="w-3 h-3 mr-1" /> ตีกลับ
+                      <XCircle className="mr-1.5 size-3.5" /> ตีกลับ
                     </Button>
                   </>
                 )}
               </CardFooter>
             </Card>
+
+            <div className="rounded-xl border border-l-4 border-slate-200 border-l-[#fdc425] bg-white/80 p-4 shadow-sm">
+              <div className="flex gap-3">
+                <WalletCards className="mt-0.5 size-5 shrink-0 text-[#785a00]" />
+                <div>
+                  <p className="text-sm font-bold text-slate-800">ข้อสังเกตงบประมาณ</p>
+                  <p className="mt-1 text-xs leading-relaxed text-slate-600">
+                    หลังคำขอนี้ งบประมาณจะถูกใช้ไปประมาณ {projectedPercent.toFixed(1)}% ของวงเงินอนุมัติ
+                    {isOverBudget ? " และยอดคงเหลือติดลบ กรุณาตรวจสอบก่อนอนุมัติ" : " ระบบจะบันทึกผลกระทบงบประมาณตามขั้นตอนอนุมัติเดิม"}
+                  </p>
+                </div>
+              </div>
+            </div>
           </div>
-        </div>
+        </aside>
       </div>
     </div>
   );

@@ -3,8 +3,8 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { 
-  Plus, FileText, CheckCircle2, 
-  XCircle, Clock, FileSignature, HandCoins, X, Check, Eye
+  Plus, FileText, CheckCircle2, ArrowUpDown,
+  XCircle, Clock, FileSignature, HandCoins, X, Check, Eye, PackageSearch
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -103,7 +103,12 @@ export function ProcurementClient({
 
   // Derive alert state
   const pendingRequestsCount = requests.filter(r => r.status !== "APPROVED" && r.status !== "REJECTED").length;
-  const canCreateRequest = showProcureCol && (sessionRole === "TEACHER" || sessionRole === "DEPT_HEAD" || sessionRole === "SUPER_ADMIN");
+  const canCreateRequest =
+    showProcureCol &&
+    (sessionRole === "TEACHER" ||
+      sessionRole === "DEPT_HEAD" ||
+      sessionRole === "SUPER_ADMIN" ||
+      sessionRole === "PROCUREMENT");
 
   const activeFilters = useMemo<ActiveFilterSummary[]>(() => {
     const items: ActiveFilterSummary[] = [];
@@ -159,11 +164,34 @@ export function ProcurementClient({
           </p>
         </div>
         <div className="flex gap-3">
-          <Button variant="outline" className="hidden sm:flex" disabled>
+          <Button
+            variant="outline"
+            className="hidden sm:flex"
+            onClick={() => router.push("/procurement/inventory")}
+          >
+            <PackageSearch className="mr-2 h-4 w-4" />
+            ทะเบียนคุมสินค้า
+          </Button>
+          <Button
+            variant="outline"
+            className="hidden sm:flex"
+            onClick={() => router.push("/procurement/stock-movements")}
+          >
+            <ArrowUpDown className="mr-2 h-4 w-4" />
+            เคลื่อนไหววัสดุ
+          </Button>
+          <Button
+            variant="outline"
+            className="hidden sm:flex"
+            onClick={() => router.push("/procurement/reports/annual")}
+          >
             ส่งออกรายงาน
           </Button>
           {canCreateRequest && (
-            <Button className="bg-primary hover:bg-primary/90 text-white shadow-sm">
+            <Button
+              className="bg-primary hover:bg-primary/90 text-white shadow-sm"
+              onClick={() => router.push("/procurement/new")}
+            >
               <Plus className="mr-2 h-4 w-4" />
               สร้างคำขอจัดซื้อ
             </Button>
@@ -327,7 +355,15 @@ export function ProcurementClient({
                           {formatThaiDate(req.documentDate)}
                         </td>
                         <td className="py-3 px-4 text-center">
-                          <Button variant="ghost" size="sm" className="h-8 text-primary hover:text-primary hover:bg-primary/10">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 text-primary hover:text-primary hover:bg-primary/10"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              router.push(`/procurement/${req.id}`);
+                            }}
+                          >
                             ดูรายละเอียด
                           </Button>
                         </td>
@@ -403,10 +439,18 @@ export function ProcurementClient({
                 </div>
 
                 <div className="p-4 bg-slate-50 flex flex-col gap-2">
-                  <Button variant="outline" className="w-full bg-white">
+                  <Button
+                    variant="outline"
+                    className="w-full bg-white"
+                    onClick={() => router.push(`/procurement/${selectedRequest.id}`)}
+                  >
                     <Eye className="mr-2 h-4 w-4" /> ดูรายละเอียดเต็ม
                   </Button>
-                  <Button variant="outline" className="w-full bg-white">
+                  <Button
+                    variant="outline"
+                    className="w-full bg-white"
+                    onClick={() => window.open(`/procurement/${selectedRequest.id}/print`, "_blank")}
+                  >
                     <FileText className="mr-2 h-4 w-4" /> พิมพ์เอกสาร
                   </Button>
                   

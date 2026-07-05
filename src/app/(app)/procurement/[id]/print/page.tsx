@@ -1,14 +1,22 @@
 /* eslint-disable @next/next/no-img-element -- print layout requires fixed physical image dimensions */
 import { prisma } from "@/lib/prisma";
 import { notFound } from "next/navigation";
-import { formatBaht } from "@/lib/utils";
+import Link from "next/link";
+import { formatBaht, formatThaiDate } from "@/lib/utils";
+import {
+  ArrowLeft,
+  BarChart3,
+  FileText,
+  Pencil,
+  Printer,
+} from "lucide-react";
 import {
   PURCHASE_ITEM_CAPACITY_ERROR,
   formatMemoBudgetAmount,
   getPurchaseItemCapacityError,
   getPurchasePrintRows,
 } from "@/lib/procurement-print";
-import { PrintTrigger } from "./_trigger";
+import { PrintButton, PrintTrigger } from "./_trigger";
 
 // Thai Baht Text conversion helper
 function getBahtText(num: number): string {
@@ -66,10 +74,13 @@ function getBahtText(num: number): string {
 
 export default async function PrintPurchaseRequestPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ autoprint?: string }>;
 }) {
   const { id } = await params;
+  await searchParams;
   if (!id) return notFound();
 
   const request = await prisma.purchaseRequest.findUnique({
@@ -80,6 +91,12 @@ export default async function PrintPurchaseRequestPage({
       },
       activity: true,
       fundSource: true,
+      budgetWallet: {
+        select: {
+          name: true,
+          code: true,
+        },
+      },
       items: true,
       createdBy: true,
     },
@@ -132,6 +149,53 @@ export default async function PrintPurchaseRequestPage({
   ];
   const docMonth = docMonths[documentDate.getMonth()];
   const docYear = documentDate.getFullYear() + 543;
+  const allocatedBudget = Number(request.allocatedBudget ?? request.project.budgetApproved ?? 0);
+  const requestedAmount = Number(request.requestedAmount);
+  const remainingBalance = Number(request.remainingBalance ?? 0);
+  const previousBalance = Number(request.previousBalance ?? 0);
+  const spentBefore = Math.max(0, allocatedBudget - previousBalance);
+  const usedAfterPercent = allocatedBudget > 0
+    ? Math.min(100, ((spentBefore + requestedAmount) / allocatedBudget) * 100)
+    : 0;
+  const remainingPercent = Math.max(0, 100 - usedAfterPercent);
+  const approvalHistory = [
+    {
+      label: "สร้างเอกสาร",
+      at: request.createdAt,
+      by: request.createdBy?.fullName ?? "ไม่ระบุ",
+      done: true,
+    },
+    {
+      label: "งานแผนงานตรวจสอบ",
+      at: request.planApprovedAt,
+      by: request.planApprovedById ? approverMap[request.planApprovedById] : null,
+      done: Boolean(request.planApprovedAt),
+    },
+    {
+      label: "งานการเงินตรวจสอบ",
+      at: request.financeApprovedAt,
+      by: request.financeApprovedById ? approverMap[request.financeApprovedById] : null,
+      done: Boolean(request.financeApprovedAt),
+    },
+    {
+      label: "งานพัสดุตรวจสอบ",
+      at: request.procurementApprovedAt,
+      by: request.procurementApprovedById ? approverMap[request.procurementApprovedById] : null,
+      done: Boolean(request.procurementApprovedAt),
+    },
+    {
+      label: "หัวหน้างบเห็นชอบ",
+      at: request.budgetApprovedAt,
+      by: request.budgetApprovedById ? approverMap[request.budgetApprovedById] : null,
+      done: Boolean(request.budgetApprovedAt),
+    },
+    {
+      label: "ผู้บริหารอนุมัติ",
+      at: request.directorApprovedAt,
+      by: request.directorApprovedById ? approverMap[request.directorApprovedById] : null,
+      done: Boolean(request.directorApprovedAt),
+    },
+  ];
 
   // Dotted underline helper
   const dots = (n: number) => ".".repeat(n);
@@ -158,7 +222,26 @@ export default async function PrintPurchaseRequestPage({
           font-size: 12pt;
           line-height: 1.05;
           color: #000 !important;
-          background: #d1d5db;
+          background: #faf8ff;
+        }
+
+        .preview-shell {
+          min-height: 100vh;
+          background:
+            radial-gradient(circle at top right, rgba(0,45,118,0.08), transparent 30rem),
+            radial-gradient(circle at bottom left, rgba(253,196,37,0.08), transparent 24rem),
+            #faf8ff;
+          color: #131b2e;
+          font-family: 'Sarabun', 'TH Sarabun New', sans-serif !important;
+        }
+
+        .preview-toolbar,
+        .preview-rail {
+          font-family: 'Sarabun', 'TH Sarabun New', sans-serif !important;
+        }
+
+        .document-canvas {
+          min-width: 0;
         }
 
         .print-page {
@@ -188,6 +271,16 @@ export default async function PrintPurchaseRequestPage({
 
         @media print {
           html, body { background: #fff !important; margin: 0 !important; width: 21cm; }
+          .no-print { display: none !important; }
+          .preview-shell {
+            min-height: auto !important;
+            background: #fff !important;
+            display: block !important;
+          }
+          .document-canvas {
+            display: block !important;
+            width: 21cm !important;
+          }
           .print-page {
             margin: 0 !important;
             box-shadow: none !important;
@@ -213,6 +306,40 @@ export default async function PrintPurchaseRequestPage({
         .item-table .item-row { height: 0.62cm; }
       ` }} />
 
+      <main className="preview-shell px-4 py-6 sm:px-6 lg:px-8">
+        <div className="mx-auto max-w-[1280px]">
+          <div className="no-print preview-toolbar mb-6 flex flex-col gap-4 rounded-xl border border-[#c3c6d4] bg-white/80 p-4 shadow-sm backdrop-blur md:flex-row md:items-center md:justify-between">
+            <div>
+              <Link href={`/procurement/${request.id}`} className="inline-flex items-center gap-2 text-sm font-semibold text-[#434652] transition hover:text-[#002d76]">
+                <ArrowLeft className="size-4" />
+                กลับไปที่รายละเอียด
+              </Link>
+              <h1 className="mt-2 text-2xl font-extrabold text-[#131b2e]">
+                ใบขอซื้อ/ขอจ้าง {request.documentNo ? `เลขที่ ${request.documentNo}` : ""}
+              </h1>
+              <p className="mt-1 max-w-2xl text-sm text-[#434652]">{request.subject}</p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Link
+                href={`/procurement/${request.id}/edit`}
+                className="inline-flex h-10 items-center gap-2 rounded-lg border border-[#c3c6d4] bg-white px-4 text-sm font-semibold text-[#131b2e] transition hover:bg-[#f2f3ff]"
+              >
+                <Pencil className="size-4" />
+                แก้ไขข้อมูล
+              </Link>
+              <PrintButton className="inline-flex h-10 items-center gap-2 rounded-lg border border-[#c3c6d4] bg-white px-4 text-sm font-semibold text-[#131b2e] transition hover:bg-[#f2f3ff]">
+                <FileText className="size-4" />
+                บันทึกเป็น PDF
+              </PrintButton>
+              <PrintButton className="inline-flex h-10 items-center gap-2 rounded-lg bg-[#002d76] px-5 text-sm font-bold text-white shadow-lg shadow-blue-950/10 transition hover:bg-[#0842a1]">
+                <Printer className="size-4" />
+                พิมพ์เอกสาร
+              </PrintButton>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
+            <div className="document-canvas min-w-0">
       {/* ============ PAGE 1: บันทึกข้อความ ============ */}
       <div className="print-page" data-print-page="1">
 
@@ -495,6 +622,102 @@ export default async function PrintPurchaseRequestPage({
           <div style={{ paddingLeft: '1.25cm' }}>4. กรณีวงเงินเกิน 100,000 บาท แต่งตั้งคณะกรรมการตรวจรับ 3 คน ต่ำกว่า 100,000 บาท 1 คน</div>
         </div>
       </div>
+            </div>
+
+            <aside className="no-print preview-rail space-y-4 xl:sticky xl:top-6 xl:self-start">
+              <section className="overflow-hidden rounded-xl border border-[#c3c6d4] bg-white shadow-sm">
+                <div className="border-b border-[#c3c6d4] bg-[#e2e7ff] px-4 py-3">
+                  <h2 className="flex items-center gap-2 text-sm font-extrabold text-[#002d76]">
+                    <BarChart3 className="size-4" />
+                    สรุปงบประมาณโครงการ
+                  </h2>
+                </div>
+                <div className="space-y-4 p-4">
+                  <div>
+                    <p className="text-xs font-semibold text-[#434652]">งบประมาณที่ได้รับจัดสรร</p>
+                    <p className="mt-1 text-xl font-extrabold text-[#131b2e]">{formatBaht(allocatedBudget)}</p>
+                  </div>
+                  <div className="h-px bg-[#c3c6d4]" />
+                  <div>
+                    <p className="text-xs font-semibold text-[#434652]">ยอดขอซื้อครั้งนี้</p>
+                    <p className="mt-1 text-lg font-extrabold text-[#002d76]">{formatBaht(requestedAmount)}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs font-semibold text-[#434652]">งบคงเหลือหลังหักรายการ</p>
+                    <p className="mt-1 text-lg font-extrabold text-[#785a00]">{formatBaht(remainingBalance)}</p>
+                  </div>
+                  <div>
+                    <div className="mb-1 flex justify-between text-[11px] font-bold text-[#434652]">
+                      <span>ใช้ไปแล้ว {usedAfterPercent.toFixed(1)}%</span>
+                      <span>คงเหลือ {remainingPercent.toFixed(1)}%</span>
+                    </div>
+                    <div className="h-2 overflow-hidden rounded-full bg-[#dae2fd]">
+                      <div className="h-full rounded-full bg-[#002d76]" style={{ width: `${usedAfterPercent}%` }} />
+                    </div>
+                  </div>
+                </div>
+              </section>
+
+              <section className="rounded-xl border border-[#c3c6d4] bg-white/80 p-4 shadow-sm backdrop-blur">
+                <h2 className="border-b border-[#c3c6d4] pb-2 text-sm font-extrabold text-[#131b2e]">ข้อมูลเอกสาร</h2>
+                <div className="mt-4 grid grid-cols-2 gap-4 text-sm">
+                  <div>
+                    <p className="text-[10px] font-bold uppercase text-[#434652]">เลขเอกสาร</p>
+                    <p className="font-bold text-[#131b2e]">{request.documentNo || "-"}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-bold uppercase text-[#434652]">ประเภท</p>
+                    <p className="font-bold text-[#131b2e]">{request.category}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-bold uppercase text-[#434652]">สร้างโดย</p>
+                    <p className="font-bold text-[#131b2e]">{request.createdBy?.fullName || "-"}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-bold uppercase text-[#434652]">สถานะ</p>
+                    <span className="inline-flex rounded-full bg-[#dae2ff] px-2 py-0.5 text-[10px] font-bold text-[#001848]">
+                      {request.status}
+                    </span>
+                  </div>
+                  <div className="col-span-2">
+                    <p className="text-[10px] font-bold uppercase text-[#434652]">กระเป๋างบประมาณ</p>
+                    <p className="font-bold text-[#131b2e]">{request.budgetWallet?.name || "ไม่ได้ระบุ"}</p>
+                  </div>
+                </div>
+              </section>
+
+              <section className="rounded-xl border border-[#c3c6d4] bg-white p-4 shadow-sm">
+                <h2 className="mb-4 text-sm font-extrabold text-[#131b2e]">ประวัติการดำเนินงาน</h2>
+                <div className="space-y-4">
+                  {approvalHistory.map((item, index) => (
+                    <div key={item.label} className="flex gap-3">
+                      <div className="relative pt-1">
+                        <div className={item.done ? "size-2 rounded-full bg-[#002d76]" : "size-2 rounded-full border-2 border-[#747784]"} />
+                        {index < approvalHistory.length - 1 && (
+                          <div className="absolute left-[3px] top-4 h-8 w-px bg-[#c3c6d4]" />
+                        )}
+                      </div>
+                      <div className={item.done ? "" : "opacity-50"}>
+                        <p className="text-xs font-extrabold text-[#131b2e]">{item.label}</p>
+                        <p className="text-[11px] text-[#434652]">
+                          {item.done && item.at ? formatThaiDate(item.at) : "ขั้นตอนถัดไป"}
+                        </p>
+                        {item.done && item.by && (
+                          <p className="text-[11px] font-semibold text-[#434652]">โดย {item.by}</p>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </section>
+
+              <PrintButton className="fixed bottom-6 right-6 inline-flex size-14 items-center justify-center rounded-full bg-[#002d76] text-white shadow-lg transition active:scale-95 md:hidden">
+                <Printer className="size-6" />
+              </PrintButton>
+            </aside>
+          </div>
+        </div>
+      </main>
     </>
   );
 }

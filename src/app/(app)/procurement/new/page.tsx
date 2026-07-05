@@ -4,11 +4,20 @@ import { prisma } from "@/lib/prisma";
 import { redirect } from "next/navigation";
 import { CreatePurchaseRequestForm } from "./_form";
 
-export default async function NewProcurementPage() {
+export default async function NewProcurementPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ projectId?: string | string[] }>;
+}) {
   const session = await getServerSession(authOptions);
   if (!session) {
     redirect("/login");
   }
+  const query = await searchParams;
+  const initialProjectId =
+    typeof query.projectId === "string" && query.projectId.trim() !== ""
+      ? query.projectId
+      : null;
 
   // Fetch all approved projects
   const projects = await prisma.project.findMany({
@@ -24,26 +33,17 @@ export default async function NewProcurementPage() {
   // Role-based filtering logic
   const role = session.user.role;
   const isSuperAdmin = role === "SUPER_ADMIN";
-  const isFinance = role === "FINANCE";
   const isProcurement = role === "PROCUREMENT";
-  const isExecutive = role === "EXECUTIVE" || role === "COMMITTEE";
+  const isDeptStaff = role === "TEACHER" || role === "DEPT_HEAD";
 
-  let availableProjects = projects;
+  let availableProjects: typeof projects = [];
 
-  if (!isSuperAdmin && !isFinance && !isProcurement && !isExecutive) {
-    // TEACHER or DEPT_HEAD can only see projects in their department
-    if (session.user.departmentId) {
-      availableProjects = projects.filter(
-        (p) => p.departmentId === session.user.departmentId
-      );
-    } else {
-      availableProjects = [];
-    }
-  }
-
-  // If role is COMMITTEE, they generally shouldn't create requests
-  if (role === "COMMITTEE") {
-    availableProjects = [];
+  if (isSuperAdmin || isProcurement) {
+    availableProjects = projects;
+  } else if (isDeptStaff && session.user.departmentId) {
+    availableProjects = projects.filter(
+      (p) => p.departmentId === session.user.departmentId
+    );
   }
 
   // Fetch purchase requests to calculate spent amount per project
@@ -86,6 +86,7 @@ export default async function NewProcurementPage() {
     <div className="space-y-6 max-w-5xl mx-auto pb-12">
       <CreatePurchaseRequestForm
         availableProjects={serializedProjects}
+        initialProjectId={initialProjectId}
         sessionRole={role}
       />
     </div>

@@ -1,5 +1,6 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
 
 export function PrintTrigger() {
@@ -40,8 +41,8 @@ export function PrintTrigger() {
         return;
       }
 
-      const previewOnly = new URLSearchParams(window.location.search).get("preview") === "1";
-      if (!previewOnly) window.print();
+      const shouldAutoPrint = new URLSearchParams(window.location.search).get("autoprint") === "1";
+      if (shouldAutoPrint) window.print();
     }
 
     void preparePrint();
@@ -56,5 +57,19 @@ export function PrintTrigger() {
     <div className="fixed left-1/2 top-4 z-50 w-[min(90vw,42rem)] -translate-x-1/2 rounded-lg border border-red-300 bg-red-50 p-4 text-sm font-semibold text-red-900 shadow-lg print:hidden">
       {layoutError}
     </div>
+  );
+}
+
+export function PrintButton({
+  children,
+  className,
+}: {
+  children: ReactNode;
+  className?: string;
+}) {
+  return (
+    <button type="button" className={className} onClick={() => window.print()}>
+      {children}
+    </button>
   );
 }

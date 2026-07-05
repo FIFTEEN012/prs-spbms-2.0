@@ -38,18 +38,25 @@ const STEPS = [
 
 export function CreatePurchaseRequestForm({
   availableProjects,
+  initialProjectId,
   sessionRole,
 }: {
   availableProjects: AvailableProject[];
+  initialProjectId?: string | null;
   sessionRole: string;
 }) {
   const router = useRouter();
   
   const [loading, setLoading] = useState(false);
   const [currentStep, setCurrentStep] = useState(1);
+  const initialProjectIsAvailable = initialProjectId
+    ? availableProjects.some((project) => project.id === initialProjectId)
+    : true;
 
   // Form Fields
-  const [selectedProjectId, setSelectedProjectId] = useState<string>("");
+  const [selectedProjectId, setSelectedProjectId] = useState<string>(
+    initialProjectIsAvailable && initialProjectId ? initialProjectId : "",
+  );
   const [documentNo, setDocumentNo] = useState("");
   const [documentDate, setDocumentDate] = useState(new Date().toISOString().split("T")[0]);
   const [subject, setSubject] = useState("");
@@ -65,6 +72,7 @@ export function CreatePurchaseRequestForm({
   const [formSuccess, setFormSuccess] = useState("");
 
   const selectedProject = availableProjects.find(p => p.id === selectedProjectId);
+  const showInitialProjectWarning = Boolean(initialProjectId && !initialProjectIsAvailable);
   
   const totalAmount = items.reduce((sum, item) => {
     const q = Number(item.quantity) || 0;
@@ -225,6 +233,18 @@ export function CreatePurchaseRequestForm({
       
       {/* Main Form Area */}
       <div className="flex-1 space-y-6">
+        {showInitialProjectWarning && (
+          <div className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+            <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
+            <div>
+              <p className="font-semibold">ไม่สามารถสร้างคำขอจากโครงการนี้ได้</p>
+              <p className="mt-1 text-amber-800">
+                โครงการอาจยังไม่ได้รับอนุมัติ หรือบัญชีนี้ไม่มีสิทธิ์เข้าถึงโครงการดังกล่าว
+                กรุณาเลือกโครงการอื่นที่พร้อมสร้างคำขอจัดซื้อ
+              </p>
+            </div>
+          </div>
+        )}
         
         {/* Stepper */}
         <Card className="border-none shadow-sm bg-white overflow-hidden">

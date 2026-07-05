@@ -48,6 +48,13 @@ export default async function PurchaseRequestDetailPage({
       },
       activity: true,
       fundSource: true,
+      budgetWallet: {
+        select: {
+          id: true,
+          name: true,
+          code: true,
+        },
+      },
       items: true,
       createdBy: {
         select: { fullName: true, username: true, role: true },
@@ -81,7 +88,7 @@ export default async function PurchaseRequestDetailPage({
   const serializedRequest = serializeDecimals(request);
 
   return (
-    <div className="space-y-6 max-w-5xl mx-auto pb-12">
+    <div className="mx-auto max-w-[1280px] space-y-6 pb-12">
       <PurchaseRequestDetailClient
         request={serializedRequest as any}
         currentUser={{ id: session.user.id, role: session.user.role, departmentId: session.user.departmentId ?? null }}

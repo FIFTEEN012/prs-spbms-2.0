@@ -1,6 +1,5 @@
 import { Sidebar } from "@/components/sidebar";
 import { MobileNav } from "@/components/mobile-nav";
-import { GlobalBudgetWalletPanel } from "@/components/global-budget-wallet-panel";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { redirect } from "next/navigation";
@@ -20,7 +19,6 @@ export default async function AppLayout({
       <main className="flex-1 overflow-x-hidden px-4 pb-[max(5rem,env(safe-area-inset-bottom))] pt-4 md:px-6 md:py-6 print:w-full print:bg-white print:p-0">
         <div className="mx-auto w-full max-w-7xl">{children}</div>
       </main>
-      <GlobalBudgetWalletPanel />
     </div>
   );
 }
